@@ -18,7 +18,11 @@ import { countSolutions, asNurikabe, UNIQUE, NONE, MANY, OVERBUDGET } from './co
 import { makeRng } from './rng.js';
 
 // ---------- 档位：尺寸 × 岛的大小，是分难度的两根轴 ----------
-// band 是"量出来的"分数区间，初值来自 tools/balance.mjs 的实测分位数，改轴必须重量。
+// band 是"量出来的"分数区间，改轴必须重量：`SAMPLES=24 node tools/balance.mjs`（不筛带实测）。
+// 现值为 2026-09-28 那次 balance 的实测分布 [min, max] 向外取整（seed=`scn|<档>|<i>`）：
+//   初学 34–43 / 熟手 51–62.5 / 常规 71.5–82 / 高手 89–110 / 大师 139–161，
+// 五档 p50 = 37.5 / 54.5 / 75.5 / 95.5 / 146.5 严格递增，入带率 24/24 × 5 档 = 100%。
+// 页面上「实测 X–Y 分」的文案读的就是这里，band 一旦说谎 CI 的 balance 步骤就会红。
 //
 // ⚠ 岛那根轴（maxIsland）只推到 4，不是随手写的：数墙出货的第一道闸门是"**满线索盘**铅笔推得完"
 // （下面 generateOne 里的 fullNotPencil），岛越大这块盘越推不完，重试次数跟着爆。
@@ -38,7 +42,7 @@ export const TIERS = [
     blackRatio: 0.6,
     minClues: 5,
     attempts: 200,
-    band: [30, 48],
+    band: [34, 43],
   },
   {
     key: 'skilled',
@@ -49,7 +53,7 @@ export const TIERS = [
     blackRatio: 0.56,
     minClues: 6,
     attempts: 200,
-    band: [46, 66],
+    band: [51, 63],
   },
   {
     key: 'regular',
@@ -60,7 +64,7 @@ export const TIERS = [
     blackRatio: 0.54,
     minClues: 7,
     attempts: 300,
-    band: [66, 88],
+    band: [71, 82],
   },
   {
     key: 'expert',
@@ -71,7 +75,7 @@ export const TIERS = [
     blackRatio: 0.55,
     minClues: 8,
     attempts: 500,
-    band: [85, 110],
+    band: [89, 110],
   },
   {
     key: 'master',
@@ -82,7 +86,7 @@ export const TIERS = [
     blackRatio: 0.6,
     minClues: 10,
     attempts: 700,
-    band: [133, 165],
+    band: [139, 161],
   },
 ];
 

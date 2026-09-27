@@ -26,9 +26,10 @@ jobs:
       #
       # EVERY step below names a file that exists in this repo at this commit. Two steps
       # the sibling repos carry are deliberately ABSENT, because their files are not
-      # written yet:  tools/bake.mjs  (烘焙题池) and  tools/balance.mjs  (难度梯实测),
-      # plus the browser gate tools/verify.sh + tools/scenarios.js.
-      # When they land, add their steps for real. Do NOT gate them with `|| true`,
+      # written yet:  tools/bake.mjs  (烘焙题池) and  tools/verify.sh + tools/scenarios.js
+      # (浏览器闸). The difficulty-ladder step WAS the third of those — tools/balance.mjs
+      # now exists, so it runs for real below.
+      # When bake/verify land, add their steps for real. Do NOT gate them with `|| true`,
       # `continue-on-error`, or "skip if the file is missing": a gate that passes because
       # the thing it checks does not exist is a lie written into the door.
       - name: Syntax check every source
@@ -45,6 +46,15 @@ jobs:
       # counts in the report are summed by the harness, not typed by hand.
       - name: Engine tests
         run: node tools/engine-test.mjs
+
+      # The difficulty promise, measured: 5 samples/tier generate live, the quantile
+      # table is printed, and the gate goes red unless every tier ships all its
+      # samples, every sample lands in its own band (100%), and the five p50s strictly
+      # increase. SAMPLES=24 is the release calibration the TIERS bands were written
+      # from; the run is deterministic (seeds `scn|<tier>|<i>`), so a red here means
+      # the engine moved under the bands, not that the dice rolled badly.
+      - name: Balance ladder (measured bands, per tier)
+        run: SAMPLES=24 node tools/balance.mjs
 
       # The entry graph must be reachable: index.html loads js/main.js as a module, and
       # that file is what mounts window.nurikabe (the surface the browser gate reads).
