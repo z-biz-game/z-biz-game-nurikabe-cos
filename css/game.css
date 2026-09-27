@@ -75,7 +75,7 @@ button.ghost:hover { border-color: var(--line-heavy); background: var(--surface-
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--landInk);
+  color: var(--land-ink);
   font-weight: 700;
   box-shadow: var(--shadow-level2);
 }
@@ -92,8 +92,13 @@ button.link {
   border: 0;
   background: none;
   color: var(--ink-faint);
-  padding: 0 4px;
-  min-height: 0;
+  /* "看着像一行小字"不是躲开 44×44 的理由：页脚那个清空存档的按钮是真能点的，
+     命中盒照样按主题的 --touch-min 撑满，只是不描边、不垫底色。 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  padding: 0 8px;
   text-decoration: underline;
   font-size: 12px;
   box-shadow: none;
@@ -256,6 +261,11 @@ main { flex: 1; }
   background: var(--surface);
   padding: var(--space-card);
   box-shadow: var(--shadow-level2);
+  /* 画布的宽是照着 .stage 的内容盒算出来的，而画布自己是个 inline style 的定宽盒子：
+     网格轨道默认不许收到 min-content 以下，于是缩窗口时这条 1fr 轨被上一帧的画布顶着不撒手，
+     500px 视口里量到 568px 的盘 —— 横向滚动条就是这么来的（也正是"照容器量"这条规矩
+     唯一需要补的一刀：容器得先真能缩）。 */
+  min-width: 0;
 }
 
 .stage-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -342,8 +352,8 @@ main { flex: 1; }
   border-radius: 3px;
   vertical-align: -1px;
 }
-#btn-mode-wall::before { background: var(--wall); box-shadow: inset 0 0 0 1px var(--wallEdge); }
-#btn-mode-land::before { background: var(--land); box-shadow: inset 0 0 0 1px var(--landEdge); }
+#btn-mode-wall::before { background: var(--wall); box-shadow: inset 0 0 0 1px var(--wall-edge); }
+#btn-mode-land::before { background: var(--land); box-shadow: inset 0 0 0 1px var(--land-edge); }
 
 .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
@@ -388,8 +398,8 @@ main { flex: 1; }
 
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
 .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
-.sw-wall { background: var(--wall); box-shadow: inset 0 0 0 1px var(--wallEdge); }
-.sw-land { background: var(--land); box-shadow: inset 0 0 0 1px var(--landEdge); }
+.sw-wall { background: var(--wall); box-shadow: inset 0 0 0 1px var(--wall-edge); }
+.sw-land { background: var(--land); box-shadow: inset 0 0 0 1px var(--land-edge); }
 .sw-unknown { background: var(--unknown-cell); box-shadow: inset 0 0 0 1px var(--line-heavy); }
 .sw-free { background: var(--land); box-shadow: inset 0 0 0 2px var(--pencil-strong); }
 .sw-done { background: var(--success); }

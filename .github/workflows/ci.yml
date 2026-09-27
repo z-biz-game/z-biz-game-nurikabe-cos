@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: syntax + engine guarantees
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No install step at all: this game has zero runtime dependencies and zero build
+      # steps (package.json declares only electron as a devDependency, which `check`/`test`
+      # never import). Pulling a package graph into CI would only add network flakes, and
+      # there is no lockfile to honour — `--frozen-lockfile` would be theatre.
+      #
+      # EVERY step below names a file that exists in this repo at this commit. Two steps
+      # the sibling repos carry are deliberately ABSENT, because their files are not
+      # written yet:  tools/bake.mjs  (烘焙题池) and  tools/balance.mjs  (难度梯实测),
+      # plus the browser gate tools/verify.sh + tools/scenarios.js.
+      # When they land, add their steps for real. Do NOT gate them with `|| true`,
+      # `continue-on-error`, or "skip if the file is missing": a gate that passes because
+      # the thing it checks does not exist is a lie written into the door.
+      - name: Syntax check every source
+        run: npm run check
+
+      - name: Syntax check the harness
+        run: |
+          for f in $(git ls-files 'tools/*.mjs' 'tools/*.cjs'); do node --check "$f" || exit 1; done
+
+      # The engine's own promises: contradiction detection, the tap/stroke/undo state
+      # machine, "a shipped board is pencil-solvable AND unique per the second,
+      # deliberately distrustful enumerator", and rng/daily-seed determinism.
+      # 435 assertions across 8 sections (A1 A2 B C D1 D2 D3 E) as of this commit — the
+      # counts in the report are summed by the harness, not typed by hand.
+      - name: Engine tests
+        run: node tools/engine-test.mjs
+
+      # The entry graph must be reachable: index.html loads js/main.js as a module, and
+      # that file is what mounts window.nurikabe (the surface the browser gate reads).
+      # A missing entry file used to pass CI silently because nothing checked it existed.
+      - name: Entry files exist and mount the harness surface
+        run: |
+          test -f index.html
+          test -f js/main.js
+          grep -q '<canvas' index.html
+          grep -q 'js/main.js' index.html
+          grep -q 'window.nurikabe' js/main.js
+          grep -q 'window.App' js/main.js
+
+      # What this CI does NOT cover, stated out loud so nobody mistakes green for shipped:
+      # the page actually booting in a real browser (no uncaught exceptions, every element
+      # id owned, dirty save files) needs a real Chrome and a real localStorage, which is
+      # the browser gate's job — that gate is the next round's deliverable.
