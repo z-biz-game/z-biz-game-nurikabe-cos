@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#080B16" />
+<title>数墙 · Nurikabe 岛屿与墙的推理</title>
+<meta name="description" content="Nurikabe 数墙：数字写着它所在那座白岛有几格，所有黑墙连成一整块，任何 2×2 都不能全黑。这里每局唯一解、每局都能用逻辑推到底，提示只说线索真的逼得出的那一步。" />
+<!-- 图标内联成 data URI：不然浏览器会去 Pages 域名根上探 /favicon.ico，白留一条 404。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23080C18'/%3E%3Cpath d='M4 4 h13 v13 h-13 z' fill='%230F1730'/%3E%3Cpath d='M18 4 h10 v11 h-10 z' fill='%23080C18'/%3E%3Cpath d='M2 19 h12 v11 h-12 z' fill='%23EDF2FA'/%3E%3Cpath d='M15 18 h15 v13 h-15 z' fill='%23080C18'/%3E%3Ctext x='8' y='27' font-family='ui-monospace,monospace' font-size='11' font-weight='700' fill='%230C1220' text-anchor='middle'%3E3%3C/text%3E%3Ccircle cx='24' cy='23' r='1.6' fill='%23202C48'/%3E%3Ccircle cx='28' cy='10' r='1.5' fill='%23202C48'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="css/game.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>数墙</h1>
+      <p class="sub">Nurikabe · 岛与墙</p>
+    </div>
+    <div class="top-actions">
+      <button id="btn-sound" class="ghost" type="button" aria-pressed="true">音效 开</button>
+      <button id="btn-motion" class="ghost" type="button" aria-pressed="false">动效 全</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-menu" class="view">
+      <div class="menu-hero">
+        <h2>数字写着那座白岛有几格，剩下的全是连成一整块的黑墙</h2>
+        <p>
+          每个数字都属下一块刚好那么大的白岛，岛里只有它自己一个数字；所有黑格必须彼此四连通成一片海，
+          而任何 2×2 都不许四格全黑。这里没有运气题：每一局都只有一个答案，也每一局都能靠逻辑推到底。
+        </p>
+      </div>
+
+      <div class="menu-cols">
+        <div class="col">
+          <h3 class="col-title">选一档</h3>
+          <div id="tier-list" class="tiers"></div>
+          <div id="resume-card" class="resume" hidden>
+            <div class="resume-txt">
+              <strong id="resume-name">未完成的牌局</strong>
+              <span id="resume-meta"></span>
+            </div>
+            <button id="btn-resume" class="primary" type="button">继续</button>
+          </div>
+        </div>
+
+        <div class="col">
+          <h3 class="col-title">纪录（同档先比提示次数，再看步数，最后看时间）</h3>
+          <ul id="record-list" class="records"></ul>
+
+          <h3 class="col-title">三条规则（Nikoli 原文）</h3>
+          <ol class="rules">
+            <li><b>数字即岛</b>：数字 N 所在的白岛，连数字格自己一起算，恰好 N 格；一个岛里只有一个数字，岛内四连通。</li>
+            <li><b>墙是一整块</b>：所有黑格必须四连通，成一整片海，不许分出第二块。</li>
+            <li><b>二二不全黑</b>：任何一个 2×2 里，四格全黑就是撞了规则。</li>
+          </ol>
+
+          <h3 class="col-title">提示会说的那七条推理</h3>
+          <ul id="rule-list" class="pencil-rules"></ul>
+          <p class="rules-note">这七条只查局部的账：它们写下的每一格，在盘面的<b>每一个解</b>里都成立。所以"推得出"和"必定对"是同一件事。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-game" class="view" hidden>
+      <div class="stage">
+        <div class="stage-head">
+          <span id="stat-name" class="puzzle-name">—</span>
+          <span id="stat-tier" class="chip">—</span>
+          <span id="stat-proof" class="chip">证明 —</span>
+          <span id="stat-time" class="chip mono">00:00</span>
+        </div>
+        <div id="board-wrap">
+          <canvas id="board" data-mode="wall" role="img" aria-label="数墙盘面：拖动落墙或落岛"></canvas>
+          <div id="win-veil" hidden>
+            <div class="win-card">
+              <h3>岛都凑满，墙是一整块</h3>
+              <p id="win-meta"></p>
+              <p id="win-record" class="win-record"></p>
+              <div class="win-actions">
+                <button id="btn-again" class="primary" type="button">再来一局</button>
+                <button id="btn-menu-2" class="ghost" type="button">回选档</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p id="state-line" class="conflict-line" aria-live="polite"></p>
+      </div>
+
+      <aside class="panel">
+        <div class="modes" role="group" aria-label="落子种类">
+          <button id="btn-mode-wall" class="mode" type="button" aria-pressed="true" aria-label="落黑墙">■ 落墙</button>
+          <button id="btn-mode-land" class="mode" type="button" aria-pressed="false" aria-label="落白岛">□ 落岛</button>
+        </div>
+        <div class="acts">
+          <button id="btn-hint" class="primary" type="button">提示<span class="mono" id="hint-count">0</span></button>
+          <button id="btn-undo" class="ghost" type="button">撤销</button>
+          <button id="btn-new" class="ghost" type="button">换一局</button>
+          <button id="btn-clear" class="ghost" type="button">清空我的落子</button>
+          <button id="btn-menu" class="ghost" type="button">回选档</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span>步数</span><b id="stat-moves" class="mono">0</b></div>
+          <div class="stat"><span>提示</span><b id="stat-hints" class="mono">0</b></div>
+          <div class="stat"><span>已定</span><b id="stat-filled" class="mono">0/0</b></div>
+          <div class="stat"><span>未定</span><b id="stat-unknown" class="mono">0</b></div>
+          <div class="stat"><span>凑满的岛</span><b id="stat-islands" class="mono">0/0</b></div>
+          <div class="stat"><span>墙块数</span><b id="stat-wall" class="mono">0</b></div>
+          <div class="stat"><span>冲突</span><b id="stat-conflicts" class="mono">0</b></div>
+          <div class="stat"><span>难度实测</span><b id="stat-score" class="mono">—</b></div>
+        </div>
+
+        <div class="hint-box">
+          <h4 id="hint-rule">提示理由</h4>
+          <p id="hint-line">按 <b>提示</b> 会说出线索当前逼得出的一格，以及它依据哪条推理。</p>
+        </div>
+
+        <div class="legend">
+          <span><i class="sw sw-wall"></i>墙（海）</span>
+          <span><i class="sw sw-land"></i>岛（纸白）</span>
+          <span><i class="sw sw-unknown"></i>未定</span>
+          <span><i class="sw sw-free"></i>还没连上岛的白格</span>
+          <span><i class="sw sw-done"></i>凑满的岛</span>
+          <span><i class="sw sw-bad"></i>撞破规则</span>
+        </div>
+        <p class="keyhint"><b>拖动</b> 连续落子 · <b>从同色上起笔</b> 就是擦 · <b>1</b> 墙 · <b>2</b> 岛 · <b>M</b> 换 · <b>H</b> 提示 · <b>Z</b> 撤销</p>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>每局唯一解 · 每局可用逻辑推到底 · 提示只给推得出的一步 — 由 <code>tools/verify.sh</code> 在真实浏览器里逐条断言。</span>
+    <button id="btn-reset" class="link" type="button">清空存档</button>
+  </footer>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
