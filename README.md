@@ -78,8 +78,11 @@
 - **只在本地 headless Chrome 里绿过**。Safari、Firefox、真机 iOS/Android、低配设备、以及
   `prefers-reduced-motion` 之外的键盘与读屏无障碍都未经验证。
   `bash tools/verify.sh` 跑的是本机 root 形态与本机带 `/z-biz-game-nurikabe-cos/` 前缀的两种 URL
-  （两种形态各 755 条，2026-09-28 实测）；线上那个地址本身没有跑过 `BASE_URL=... npm run verify`，
-  所以本文不写"线上已核"。部署工作流是无构建的文件拷贝（`.github/workflows/pages.yml`）。
+  （两种形态各 755 条，2026-09-28 实测）。线上那一种也跑过：
+  `BASE_URL=https://z-biz-game.github.io/z-biz-game-nurikabe-cos/ bash tools/verify.sh` 交出同一套
+  9 个场景、**755 条、0 失败、20 秒**（2026-09-28 04:56，跑的就是 push 之后 Pages 上那份部署件，
+  脚本因此不起任何本地服务，只连一个 headless Chrome）。仍未验证的是浏览器种类与设备。
+  部署工作流是无构建的文件拷贝（`.github/workflows/pages.yml`）。
 - Electron 壳（`electron/main.cjs`）只有 `npm run check` 的 `node --check` 级检查，没有任何运行时断言。
 
 ## 难度是量出来的
@@ -175,7 +178,8 @@ bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL �
   （`tools/verify.sh:37-38`，每个场景都必须交出 tally，缺 tally 直接算失败，`:319-326`）。
   断言读的是 DOM 几何与**画布像素**（红框画在哪几格、绿环、墨色），不读内部标志位；
   `first` 一节还要求首页零未捕获错误、资源零 404。两种 URL 形态（根 与 `/z-biz-game-nurikabe-cos/` 前缀）
-  各 755 条全过，是 2026-09-28 的实测。
+  各 755 条全过，是 2026-09-28 的实测。线上那一形态跑的是同一条命令加 `BASE_URL=`
+  （`tools/verify.sh:12` 给的就是这个用法）：2026-09-28 04:56 在部署件上 9 场景 / 755 条 / 0 失败。
 - 一次 `bash tools/verify.sh` 就覆盖两种形态：`verify.sh` 自己在第二个端口上起一个带前缀的服务
   （两种形态与端口列在 `:5-6`）。第二遍不是凑对称——「origin 不同 → localStorage 各一套，
   前缀那一跑才是「换了文档目录」，不是「重装一遍」」是它自己写着的（`:97`，CI 侧同一条理由在

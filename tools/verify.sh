@@ -34,9 +34,9 @@ CDP_WANT=${CDP_PORT:-9361}
 HTTP_WANT=${HTTP_PORT:-5311}
 PREF_WANT=${PREFIX_PORT:-5398}
 CHROME=${CHROME_BIN:-}
-# tools/scenarios.js:1180 里已注册的场景（顺序有讲究：save→resume 是跨刷新配对，narrow 用 500×780）
+# tools/scenarios.js:1226 里已注册的场景（顺序有讲究：save→resume 是跨刷新配对，narrow 用 500×780）
 SCENARIOS_DONE="first zero hint conflict save resume daily layout narrow"
-# narrow 那条场景逐字断言 innerWidth,innerHeight === '500,780'（tools/scenarios.js:1142），
+# narrow 那条场景逐字断言 innerWidth,innerHeight === '500,780'（tools/scenarios.js:1187），
 # 靠的是 playtest.cjs 的 VIEWPORT —— 它在第一次导航**之前**下 Emulation.setDeviceMetricsOverride。
 # 每一段都显式带上视口，包括默认那一档：override 是挂在 target 上的，不清就等于留给下一段，
 # 于是 SCENARIOS="narrow first" 这种手工顺序会拿着一张 500px 的盘去断言 1280px 的几何。

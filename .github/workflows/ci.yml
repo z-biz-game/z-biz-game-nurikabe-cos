@@ -93,6 +93,14 @@ jobs:
       # ubuntu-latest ships google-chrome on PATH, which is what tools/verify.sh looks for
       # (alongside the macOS bundle path). No install step: apt/dpkg on a pinned image is a
       # flake source, and a step that can die of networking reads as "the game is broken".
+      # Viewports come from verify.sh's own defaults (VIEWPORT_DEFAULT=1280x1024,
+      # VIEWPORT_NARROW=500x780) and are applied by a CDP Emulation.setDeviceMetricsOverride
+      # before the first navigation (tools/playtest.cjs:127), so this job needs no xorg /
+      # no window manager: nothing here measures a real window. That is also why the numbers
+      # are safe to assert verbatim — the narrow scenario compares innerWidth,innerHeight
+      # against '500,780' (tools/scenarios.js:1187) and run 36349670387 passed both shapes
+      # with these defaults. If some future runner's Chrome stops honoring the height,
+      # VIEWPORT_NARROW is the lever and that eq() prints the number it actually got.
       - name: Browser gate (root + prefix)
         env:
           WD_TIMEOUT: 900

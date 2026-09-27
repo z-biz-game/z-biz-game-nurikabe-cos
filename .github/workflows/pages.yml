@@ -29,6 +29,15 @@ jobs:
           cp index.html _site/
           cp -r css js _site/
       - uses: actions/configure-pages@v5
+        # A brand-new repo has no Pages site at all, and this repo's first deploy died right
+        # here: "Get Pages site failed. Please verify that the repository has Pages enabled
+        # and configured to build using GitHub Actions" (run 36349670386, HTTP 404 from
+        # GET /pages). `enablement: true` is the action's own way to POST that site with
+        # build_type=workflow, so the first push to a fresh repo deploys instead of needing
+        # an out-of-band API call — the falsifiable form of that sentence is "delete the site
+        # and push", which is how this line was exercised (run 36349670386 was the red one).
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
