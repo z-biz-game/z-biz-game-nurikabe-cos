@@ -26,10 +26,10 @@ jobs:
       #
       # EVERY step below names a file that exists in this repo at this commit. Two steps
       # the sibling repos carry are deliberately ABSENT, because their files are not
-      # written yet:  tools/bake.mjs  (烘焙题池) and  tools/verify.sh + tools/scenarios.js
-      # (浏览器闸). The difficulty-ladder step WAS the third of those — tools/balance.mjs
-      # now exists, so it runs for real below.
-      # When bake/verify land, add their steps for real. Do NOT gate them with `|| true`,
+      # written yet:  tools/bake.mjs  (烘焙题池). The other two — tools/verify.sh +
+      # tools/scenarios.js (浏览器闸) and tools/balance.mjs (难度阶梯) — now exist, so they
+      # run for real: balance below, the browser gate in the `browser` job.
+      # When bake lands, add its step for real. Do NOT gate it with `|| true`,
       # `continue-on-error`, or "skip if the file is missing": a gate that passes because
       # the thing it checks does not exist is a lie written into the door.
       - name: Syntax check every source
@@ -42,7 +42,7 @@ jobs:
       # The engine's own promises: contradiction detection, the tap/stroke/undo state
       # machine, "a shipped board is pencil-solvable AND unique per the second,
       # deliberately distrustful enumerator", and rng/daily-seed determinism.
-      # 435 assertions across 8 sections (A1 A2 B C D1 D2 D3 E) as of this commit — the
+      # 438 assertions across 8 sections (A1 A2 B C D1 D2 D3 E) as of this commit — the
       # counts in the report are summed by the harness, not typed by hand.
       - name: Engine tests
         run: node tools/engine-test.mjs
@@ -68,7 +68,32 @@ jobs:
           grep -q 'window.nurikabe' js/main.js
           grep -q 'window.App' js/main.js
 
-      # What this CI does NOT cover, stated out loud so nobody mistakes green for shipped:
-      # the page actually booting in a real browser (no uncaught exceptions, every element
-      # id owned, dirty save files) needs a real Chrome and a real localStorage, which is
-      # the browser gate's job — that gate is the next round's deliverable.
+      # What the four steps above do NOT cover: the page actually booting in a real browser
+      # (no uncaught exceptions, every element id owned, dirty save files, the canvas pixels
+      # matching what the engine claims). That is the `browser` job below.
+
+  # tools/verify.sh is the fifth gate and, until this job existed, CI had never run it:
+  # 755 browser assertions per URL shape (first zero hint conflict save resume daily layout
+  # narrow), measured 2026-09-28. A gate that is only ever run by hand is documentation,
+  # not a gate. One invocation covers both shapes — this verify.sh starts its own prefix
+  # server on a second port, because a different origin is what gives localStorage a
+  # different cupboard, and Pages serves us under /z-biz-game-nurikabe-cos/.
+  browser:
+    name: real browser gate (both URL shapes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        # 22, not the 20 the check job uses: tools/playtest.cjs is a raw CDP driver written
+        # against Node's global WebSocket/fetch, which only exist from 22 on. On 20 the first
+        # attach dies with "WebSocket is not defined" and the job goes red before a single
+        # assertion runs.
+        with:
+          node-version: 22
+      # ubuntu-latest ships google-chrome on PATH, which is what tools/verify.sh looks for
+      # (alongside the macOS bundle path). No install step: apt/dpkg on a pinned image is a
+      # flake source, and a step that can die of networking reads as "the game is broken".
+      - name: Browser gate (root + prefix)
+        env:
+          WD_TIMEOUT: 900
+        run: bash tools/verify.sh

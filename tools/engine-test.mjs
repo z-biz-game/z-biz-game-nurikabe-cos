@@ -659,6 +659,10 @@ begin('D2 · 状态机：落子 / 循环 / 撤销');
   eq(d.clues, 2, '两个数字');
   eq(d.conflicts, 0, '空盘不该报冲突');
   eq(d.filled, 0, '落子数为 0');
+  // 画布读的是 markedCells：整张空盘 25 格全在 badCells 里（未定），
+  // 但一格都不许标红 —— 这两份名册必须能分开，否则"未定不是冲突"只是嘴上说的。
+  eq(d.badCells.size, b.n, '空盘的 badCells 就是那些未定格');
+  eq(d.markedCells.size, 0, '空盘没有一格该标红');
   const s = solve(b);
   d = diagnose(b, s.cell);
   eq(d.unknown, 0, '推完的盘没有未定');
@@ -673,6 +677,7 @@ begin('D2 · 状态机：落子 / 循环 / 撤销');
   d = diagnose(b, bad.cell);
   is(d.conflicts > 0, '全黑的盘报冲突');
   is(d.badCells.size > 0, '冲突格子给得出高亮集合');
+  eq(d.markedCells.size, d.badCells.size, '全黑的盘没有未定格：两份名册这时是同一批格');
   eq(d.white, 0, '读数里白格数对得上');
 }
 {

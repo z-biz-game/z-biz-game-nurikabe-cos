@@ -1,0 +1,211 @@
+// Minimal CDP driver for headless playtesting (Node 22+ global WebSocket/fetch).
+//
+// env: CDP_PORT  devtools port, default 9361 (this repo's pair: 5311 HTTP / 9361 CDP)
+//      BASE_URL  page origin,   default http://127.0.0.1:5311/
+//      VIEWPORT  optional "WxH"; when set, device metrics are overridden *before* the first
+//                navigation, so a scenario can assert the 900px layout and the 500px phone
+//                layout with the same page and the same profile.
+//
+//   node tools/playtest.cjs open <url>          fresh tab at <url>, prints boot logs
+//   node tools/playtest.cjs eval '<expr>'       evaluate, await promises, print result
+//   node tools/playtest.cjs eval '<expr>' nonav don't navigate first
+//   node tools/playtest.cjs scenario <name>     inject tools/scenarios.js, run __scn.<name>()
+//   node tools/playtest.cjs shot <file.png>
+//   node tools/playtest.cjs logs
+//
+// 抄自 z-biz-game-kakuro-cos / z-biz-game-skyscraper-cos 的同名文件（只读模板），本仓专属
+// 端口 5311 / 9361，前缀形态另用 5398（5392 是 tapa、5396 是 kakuro、5397 被 kenken 占去）。
+//
+// Which page to attach to is decided by BASE_URL's origin, never by a hard-coded port: an
+// `eval` that silently lands on an about:blank target reads like a broken deploy.
+//
+// scenario 命令每次都会重新注入 tools/scenarios.js 并 navigate 一次 —— 这正是
+// save→resume 这类"跨刷新"配对场景的机制：前一段场景把局面留在 localStorage，后一段场景在
+// **同一个 Chrome profile 的一次真刷新之后**跑起来，读到的是磁盘上的存档，不是内存里的残骸。
+//
+// 两种 URL 形态（根 / Pages 的 /<repo>/ 前缀）靠 BASE_URL 切换，本文件不写死任何路径：
+// 两个 origin 各有一套 localStorage，所以前缀形态测的是"换了文档目录之后页内 import 与资源
+// 还解不解得开"，而不是"换个端口重装一遍"。
+const fs = require('fs');
+const path = require('path');
+
+const PORT = Number(process.env.CDP_PORT || 9361);
+const BASE = process.env.BASE_URL || 'http://127.0.0.1:5311/';
+const ORIGIN = new URL(BASE).origin;
+const VIEWPORT = /^(\d+)x(\d+)$/.exec(process.env.VIEWPORT || '');
+const cmd = process.argv[2];
+const arg = process.argv[3];
+const rest = process.argv[4];
+const isOurs = (u) => typeof u === 'string' && u.startsWith(ORIGIN);
+
+const logs = [];
+
+class CDP {
+  constructor(ws) {
+    this.ws = ws;
+    this.id = 0;
+    this.pending = new Map();
+    ws.addEventListener('message', (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.id && this.pending.has(msg.id)) {
+        const { res, rej } = this.pending.get(msg.id);
+        this.pending.delete(msg.id);
+        msg.error ? rej(new Error(JSON.stringify(msg.error))) : res(msg.result);
+      } else if (msg.method) this.consume(msg);
+    });
+  }
+  send(method, params = {}, sessionId) {
+    const id = ++this.id;
+    return new Promise((res, rej) => {
+      this.pending.set(id, { res, rej });
+      this.ws.send(JSON.stringify({ id, method, params, sessionId }));
+    });
+  }
+  consume(m) {
+    if (m.method === 'Runtime.consoleAPICalled') {
+      logs.push(`[${m.params.type}] ` + m.params.args.map((a) => (a.value !== undefined ? String(a.value) : a.description || a.type)).join(' '));
+    } else if (m.method === 'Runtime.exceptionThrown') {
+      const e = m.params.exceptionDetails;
+      logs.push(`[EXCEPTION] ${e.exception?.description || e.text}\n  at ${e.url}:${e.lineNumber}`);
+    } else if (m.method === 'Log.entryAdded') {
+      const e = m.params.entry;
+      if (e.level === 'error') logs.push(`[log:error] ${e.text} ${e.url || ''}`);
+    }
+  }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function waitForDevTools(timeoutMs = 40000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${PORT}/json/version`);
+      if (res.ok) return res.json();
+    } catch {
+      /* not bound yet */
+    }
+    if (Date.now() > deadline) throw new Error(`devtools never bound on :${PORT}`);
+    await sleep(250);
+  }
+}
+
+async function main() {
+  const info = await waitForDevTools();
+  const ws = new WebSocket(info.webSocketDebuggerUrl);
+  await new Promise((res, rej) => {
+    ws.addEventListener('open', res);
+    ws.addEventListener('error', rej);
+  });
+  const cdp = new CDP(ws);
+
+  let list = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
+  if (cmd === 'open') {
+    for (const t of list) {
+      if (t.type === 'page' && isOurs(t.url)) {
+        try {
+          await cdp.send('Target.closeTarget', { targetId: t.id || t.targetId });
+        } catch { /* already gone */ }
+      }
+    }
+    await sleep(300);
+    list = [];
+  }
+  const existing = cmd === 'open' ? null : list.find((t) => t.type === 'page' && isOurs(t.url));
+  let sessionId;
+  if (existing) {
+    ({ sessionId } = await cdp.send('Target.attachToTarget', { targetId: existing.id || existing.targetId, flatten: true }));
+  } else {
+    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+    ({ sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true }));
+  }
+
+  await cdp.send('Runtime.enable', {}, sessionId);
+  await cdp.send('Log.enable', {}, sessionId);
+  await cdp.send('Page.enable', {}, sessionId);
+  if (VIEWPORT) {
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: Number(VIEWPORT[1]),
+      height: Number(VIEWPORT[2]),
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+  }
+
+  const evaluate = async (expression) => {
+    const r = await cdp.send(
+      'Runtime.evaluate',
+      { expression, returnByValue: true, awaitPromise: true, timeout: 900000 },
+      sessionId
+    );
+    if (r.exceptionDetails) {
+      throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+    }
+    return r.result.value;
+  };
+
+  const navigate = async (url) => {
+    await cdp.send('Page.navigate', { url }, sessionId);
+    for (let i = 0; i < 120; i++) {
+      const ready = await evaluate('document.readyState').catch(() => 'loading');
+      if (ready === 'complete') break;
+      await sleep(100);
+    }
+  };
+
+  if (cmd === 'open') {
+    await navigate(arg || BASE);
+    await sleep(400);
+    console.log('opened ' + (arg || BASE) + '\n' + (logs.join('\n') || '(no console output)'));
+  } else if (cmd === 'eval') {
+    if (rest !== 'nonav') await navigate(BASE);
+    const out = await evaluate(arg);
+    console.log(typeof out === 'string' ? out : JSON.stringify(out));
+  } else if (cmd === 'scenario') {
+    const src = fs.readFileSync(path.join(__dirname, 'scenarios.js'), 'utf8');
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: src }, sessionId);
+    await navigate(BASE);
+    // Headless reports the page as hidden, and the render loop is allowed to skip frames when
+    // hidden — so a scenario that waits on a repaint would time out against a browser that is
+    // only pretending to be in the background.
+    await evaluate(`Object.defineProperty(document,'hidden',{get:()=>false,configurable:true});
+      Object.defineProperty(document,'visibilityState',{get:()=>'visible',configurable:true});'ok'`);
+    const out = await evaluate(`(async()=>{
+      if (!window.__scn) throw new Error('scenarios.js never installed');
+      const fn = window.__scn[${JSON.stringify(arg)}];
+      if (typeof fn !== 'function') {
+        throw new Error('没有这个场景：' + ${JSON.stringify(arg)} + '（已注册：' + Object.keys(window.__scn).join(',') + '）');
+      }
+      const r = await fn();
+      return JSON.stringify(r);
+    })()`);
+    // Console noise first, machine-readable line last: the parser in verify.sh takes the final
+    // RESULT line, so a stray '{' in a log cannot hijack the report.
+    if (logs.length) console.error(logs.slice(-40).join('\n'));
+    console.log('RESULT ' + out);
+  } else if (cmd === 'shot') {
+    // A background tab only pushes compositor frames when something repaints it, so a capture
+    // taken right after a pure CSS state change (hiding one screen, showing another) can return
+    // the previous frame. Bringing the target forward forces one.
+    await cdp.send('Page.bringToFront', {}, sessionId);
+    await sleep(250);
+    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
+    fs.mkdirSync(path.dirname(arg), { recursive: true });
+    fs.writeFileSync(arg, Buffer.from(data, 'base64'));
+    console.log('wrote ' + arg);
+  } else if (cmd === 'logs' || cmd === 'reload-logs') {
+    if (cmd === 'reload-logs') await navigate(BASE);
+    console.log(logs.join('\n') || '(clean)');
+  } else {
+    console.error('unknown command: ' + cmd);
+    process.exit(64);
+  }
+  ws.close();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('ERROR ' + (err.message || err));
+  if (logs.length) console.error(logs.slice(-12).join('\n'));
+  process.exit(1);
+});

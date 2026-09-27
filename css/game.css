@@ -25,6 +25,10 @@ body { touch-action: manipulation; }
   flex-direction: column;
   gap: var(--space-card);
   min-height: 100vh;
+  /* 画布的边长是照 .stage 的内容盒算出来的，而 .stage 的宽由 #view-game 的轨道决定：
+     所以"要不要收成单列"必须问 #app 有多宽，不能问视口有多宽 —— 内嵌、带侧栏的宿主里
+     视口宽而容器窄，媒体查询会答应一个画布放不下的两列布局。inline-size 容器就是这一问。 */
+  container-type: inline-size;
 }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -284,7 +288,10 @@ main { flex: 1; }
 .chip.proof-count { color: var(--success); border-color: var(--success); }
 .chip.proof-pencil { color: var(--warn); border-color: var(--warn); }
 
-#board-wrap { position: relative; align-self: center; }
+/* 装得下就居中，装不下就贴左：300px 容器里的 10×10 只能靠 Cell.min 地板保住整格，
+   这时纯 center 会把 288px 的画布往两边各甩出去 14px —— 左边那一条是滚不回去的死角，
+   玩家看到的永远是"第一列被切掉半格"。safe center 把溢出全落到右边，那里横向滚动够得着。 */
+#board-wrap { position: relative; align-self: safe center; }
 
 #board {
   display: block;
@@ -427,8 +434,14 @@ main { flex: 1; }
 
 .foot code { font-family: var(--font-mono); color: var(--ink-dim); }
 
+/* 单列的门槛照的是 #app 的内容盒（860 = 旧那条 900 视口规则减去 2×20 页边距），
+   画布能不能放下由这一轨决定；菜单页那两条仍旧照视口：它们排的是文字卡，
+   收成几列是排版口味，不是"棋盘溢出容器"那种会把格子切一半的问题。 */
+@container (max-width: 860px) {
+  #view-game { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 900px) {
-  #view-game { grid-template-columns: 1fr; }
   .menu-cols { grid-template-columns: 1fr; }
   .foot { flex-direction: column; align-items: flex-start; }
 }

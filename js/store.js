@@ -38,7 +38,10 @@ function rleDecode(pairs, len) {
     const v = pairs[p];
     const n = pairs[p + 1];
     if (!Number.isInteger(v) || !Number.isInteger(n) || n <= 0 || v < 0 || v > 255) return null;
-    for (let k = 0; k < n && i < len; k++) b[i++] = v;
+    // 墨比盘面长：多出来的那一截不是"这一盘的后面几格"，把它截掉会得到一张每格都错位半列的盘 ——
+    // 短了要 return null，长了同样要（早先只防了短的那一侧，36 格的墨就被横着摆到 5×5 上了）。
+    if (i + n > len) return null;
+    for (let k = 0; k < n; k++) b[i++] = v;
   }
   if (i !== len) return null; // 长度对不上就是脏数据，别补一半当作能继续的局
   return b;
@@ -127,6 +130,9 @@ export const Store = {
     return this.data.settings[name];
   },
   setSetting(name, value) {
+    // "照原样应用一遍"不是"改了一下"：启动与清盘都会走一遍 applySettings，
+    // 每次都无条件写一遍，刚被 reset() 删掉的 key 就会被自己带回来（清盘清不掉磁盘）。
+    if (this.data.settings[name] === value) return;
     this.data.settings[name] = value;
     this.save();
   },

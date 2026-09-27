@@ -23,7 +23,10 @@ export const Palette = {
   wall: '#080C18',
   wallEdge: '#202C48',
   land: '#EDF2FA',
-  landEdge: '#9BB0D2',
+  // 岛的轮廓不能是"提示蓝的近亲"：#9BB0D2 与 --hint #7BB8FF 三个色道的差是 32/8/45，
+  // 在任何按色相近似找"看这里"的眼睛（闸的采样、也含色弱玩家）面前就是同一个颜色 ——
+  // 一落子，圈还没求就已满屏都是。往下压两档，让它离开提示圈的那一色。
+  landEdge: '#5F7092',
   landInk: '#0C1220',
   unknownCell: '#141C31',
 

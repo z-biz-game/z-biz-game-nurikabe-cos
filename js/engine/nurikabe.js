@@ -577,6 +577,13 @@ export function diagnose(board, cell) {
   const bad = verify(board, cell);
   const badCells = new Set();
   for (const b of bad) for (const t of b.cells || [b.cell]) if (t != null) badCells.add(t);
+  // 画布只准标这一份名册：'还有未定的格' 是"还没写完"，不是"写错了"。
+  // 未定一标红，整张开局空盘就会满屏红框（conflicts 早就是按这个口径数的）。
+  const markedCells = new Set();
+  for (const b of bad) {
+    if (b.why === '还有未定的格') continue;
+    for (const t of b.cells || [b.cell]) if (t != null) markedCells.add(t);
+  }
   const islands = [];
   const okIslands = new Set();
   for (const num of board.numbers) {
@@ -601,6 +608,7 @@ export function diagnose(board, cell) {
     wallPieces: wall.length,
     wallDone,
     badCells,
+    markedCells,
     problems: bad,
     conflicts: bad.filter((b) => b.why !== '还有未定的格').length,
   };

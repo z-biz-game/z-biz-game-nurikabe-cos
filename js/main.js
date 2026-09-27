@@ -76,8 +76,7 @@ const el = {
 let game = null;
 let view = null;
 let ticker = 0;
-let raf = 0;
-let pulse = null; // 提示刚点名的那一格：{cell, until}
+let pulse = null; // 提示刚点名的那一格：{cell, color}。全屏唯一的"看这里"，不按时钟自己消失
 let drag = null; // 还没抬起的那只手：{value, cells:Set}
 let day = null; // 当前这局是不是日课（是的话记住是哪一天）
 let lastBox = { w: 0, h: 0 }; // 上一次量到的可用盒：只有它变了才值得重排一次画布
@@ -180,26 +179,20 @@ function relayout(force = false) {
 function paint() {
   if (!view || !game) return;
   view.draw(game, {
-    pulse: pulse && pulse.until > Date.now() ? pulse : null,
+    pulse,
     preview: drag && drag.cells.size ? { cells: [...drag.cells] } : null,
   });
-  schedulePulse();
 }
 
-/** 只有高亮还活着的时候才继续要帧：一帧都不多花。 */
-function schedulePulse() {
-  if (!pulse || pulse.until <= Date.now() || raf) return;
-  raf = requestAnimationFrame(() => {
-    raf = 0;
-    paint();
-  });
-}
-
+/**
+ * 圈住提示点名的那一格，而且只圈这一格：它跟着盘面活着，直到下一步落子或下一条提示把它换走。
+ * 这里原来挂的是 Motion.line 的倒计时（到点就不画），减少动效时 until 直接算成 0 ——
+ * 于是"减少动效也照样点名那一格"这句注释自己把它做的事说反了。
+ */
 function markPulse(cell, color = null) {
   if (cell == null || cell < 0) return;
-  // 减少动效不是"什么都不说"：那一格还是要圈出来，只是不再自己找帧重画。
-  pulse = { cell, color, until: Date.now() + (prefersReducedMotion() ? 0 : Motion.line) };
-  if (prefersReducedMotion()) paint();
+  pulse = { cell, color };
+  paint();
 }
 
 // ---- 读数：一个地方写，别处只读（每一句数字都是引擎重算的） ----------------------------------
@@ -331,13 +324,15 @@ function renderRuleList() {
 
 function renderResumeCard() {
   const r = Store.resume();
+  const decided = r ? r.board.reduce((n, v) => n + (v === UNKNOWN ? 0 : 1), 0) : 0;
   const live = game && game.status !== 'won' && !el.viewGame.hidden;
-  if (!r || (live && r.seed === game.puzzle.originSeed && r.tier === game.puzzle.tier)) {
+  // 全空的档不叫"没打完的一局"：它和回选档再点一次那张卡是同一张盘，
+  // 挂在菜单上只是一行写着"0 步 · 提示 0 次 · 0/25 格已定"的广告。
+  if (!r || !decided || (live && r.seed === game.puzzle.originSeed && r.tier === game.puzzle.tier)) {
     el.resumeCard.hidden = true;
     return null;
   }
   const t = tierByKey(r.tier) || TIERS[0];
-  const decided = r.board.reduce((n, v) => n + (v === UNKNOWN ? 0 : 1), 0);
   el.resumeCard.hidden = false;
   el.resumeName.textContent = `没打完的一局：${t.name}（${t.w}×${t.h}）`;
   el.resumeMeta.textContent = `seed ${r.seed} · 用时 ${fmtMs(r.elapsedMs)} · ${r.moves} 步 · 提示 ${r.hints} 次 · ${decided}/${r.cells} 格已定`;
@@ -427,9 +422,12 @@ function startPuzzle(originSeed, tierKey, { resume = null, dayKey = null } = {})
   day = dayKey;
   pulse = null;
   drag = null;
-  if (resume) {
-    const ink = rleDecode(resume.ink, game.w * game.h);
-    if (ink) game.load(ink);
+  // 续档的墨与盘面数不上（外来档、旧版本、写坏一半的）就整份丢掉，不做"截一截还能用"：
+  // 截出来是一张每格都错位半列的盘，看着像进度，接着画只会越画越无解。
+  // 步数/求助/用时记的都是"那一盘"的代价 —— 盘丢了，代价也就没有归属，一起归零。
+  const ink = resume ? rleDecode(resume.ink, game.w * game.h) : null;
+  if (ink) {
+    game.load(ink);
     game.moves = resume.moves | 0;
     game.hints = resume.hints | 0;
     clockReset(resume.elapsedMs);
@@ -559,6 +557,7 @@ function tap(t, mode = game && game.mode) {
   if (!game || t < 0) return null;
   const step = game.tap(t, mode === undefined ? game.mode : mode);
   if (!step) return null;
+  pulse = null; // 玩家自己落了子：引擎那句"看这里"就过期了
   Sound[step.value === UNKNOWN ? 'erase' : step.value === BLACK ? 'wall' : 'land']();
   if (game.diag.conflicts > 0) Sound.conflict();
   afterChange();
@@ -625,6 +624,18 @@ function clearInk() {
   pulse = null;
   afterChange();
   return { undone: n, state: game.state() };
+}
+
+/**
+ * 「帮我把这盘推完」也只认 afterChange 这一个同步点：
+ * 直接返回 game 的结果会让引擎算出 won 而界面还停在开局的空盘——读数、状态行、
+ * 绿环、胜利横幅全都不动，玩家看着一个"已经赢了却没赢"的盘。
+ */
+function solveWithLogic(cap) {
+  if (!game) return null;
+  const res = game.solveWithLogic({ cap });
+  afterChange();
+  return res;
 }
 
 function setSound(on) {
@@ -793,7 +804,7 @@ const surface = {
     return view;
   },
   state: () => (game ? { ...game.state(), elapsedMs: nowMs(), day, won: el.winVeil.hidden === false } : null),
-  diag: () => (game ? { ...game.diag, badCells: [...game.diag.badCells], okIslands: [...game.diag.okIslands], problems: game.diag.problems.map((p) => ({ ...p, cells: p.cells || [] })) } : null),
+  diag: () => (game ? { ...game.diag, badCells: [...game.diag.badCells], markedCells: [...game.diag.markedCells], okIslands: [...game.diag.okIslands], problems: game.diag.problems.map((p) => ({ ...p, cells: p.cells || [] })) } : null),
   problems: () => (game ? game.violated.map((p) => ({ why: p.why, cell: p.cell == null ? -1 : p.cell })) : []),
   board: () => (game ? Array.from(game.st.cell) : []), // 0 未定 / 1 岛 / 2 墙
   owners: () => (game ? Array.from(game.st.owner) : []),
@@ -867,7 +878,7 @@ const surface = {
   hint,
   undo,
   clearInk,
-  solveWithLogic: (cap) => (game ? game.solveWithLogic({ cap }) : null),
+  solveWithLogic,
   setSound,
   setMotionReduced,
   resetSave,

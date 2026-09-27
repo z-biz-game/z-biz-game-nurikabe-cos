@@ -83,7 +83,7 @@ export class BoardView {
     const b = game.board;
     const st = game.st;
     const diag = game.diag;
-    const bad = diag.badCells;
+    const bad = diag.markedCells;
     const won = game.status === 'won';
     ctx.clearRect(0, 0, geo.w, geo.h);
 
@@ -118,18 +118,6 @@ export class BoardView {
     for (let i = 0; i <= b.w; i++) seg(ctx, geo.x + i * cell, geo.y, geo.x + i * cell, geo.y + b.h * cell);
     for (let j = 0; j <= b.h; j++) seg(ctx, geo.x, geo.y + j * cell, geo.x + b.w * cell, geo.y + j * cell);
     ctx.stroke();
-
-    // ---- 撞破规则的墨水：先把那一格染红，数字要压在它上面所以留到最后。
-    if (bad.size) {
-      ctx.save();
-      ctx.globalAlpha = 0.22;
-      ctx.fillStyle = Palette.error;
-      for (const t of bad) {
-        const r = this.cellRect(t);
-        ctx.fillRect(r.x, r.y, cell, cell);
-      }
-      ctx.restore();
-    }
 
     // ---- 岛：一整块纸白的连通区域画成一个轮廓（一格一条边的那种画法会让岛看起来是拼的）。
     const landBorder = [];
@@ -171,6 +159,12 @@ export class BoardView {
     }
     ctx.setLineDash([]);
 
+    // ---- 撞破规则的格：一方红框。画在岛之后是因为岛的纸白会把先画的底色整个盖掉
+    // （原先这里是 22% 的透底染色，落在岛上等于没画 —— 而白格的超编/并岛恰恰是最常见的撞法）。
+    if (bad.size) {
+      for (const t of bad) markRect(ctx, this.cellRect(t), cell, Palette.error);
+    }
+
     // ---- 数字：SF Mono，压在岛上/未定格上。颜色跟着底色走，保证永远读得清。
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -206,11 +200,7 @@ export class BoardView {
 
     // ---- 提示刚点名的那一格：整个界面只有这一处被允许说"看这里"。
     if (pulse && pulse.cell != null) {
-      const r = this.cellRect(pulse.cell);
-      ctx.strokeStyle = pulse.color || Palette.hint;
-      ctx.lineWidth = Math.max(2, cell * 0.09);
-      roundRect(ctx, r.x + 2, r.y + 2, cell - 4, cell - 4, Radius.cell);
-      ctx.stroke();
+      markRect(ctx, this.cellRect(pulse.cell), cell, pulse.color || Palette.hint);
     }
 
     // ---- 通关：外框转绿，横幅由样式表负责。
@@ -226,6 +216,19 @@ export class BoardView {
 function seg(ctx, x1, y1, x2, y2) {
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
+}
+
+/**
+ * 一格上的标记框：红框（这里错了）与提示圈（看这里）共用这一条几何，只有颜色分开。
+ * 内缩到半线宽之外（再让出 0.5px 给抗锯齿）不是审美：压在格边上的描边会把颜色漏进邻格，
+ * 邻格没被求过却带着一圈提示色的毛边 —— 满屏的"看这里"就是这么来的。
+ * 直角而不是圆角：小盘上圆角会让四个角没墨，一格框只认得出一半。
+ */
+function markRect(ctx, r, cell, color) {
+  const lw = Math.max(2, cell * 0.09);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.strokeRect(r.x + lw / 2 + 0.5, r.y + lw / 2 + 0.5, cell - lw - 1, cell - lw - 1);
 }
 
 function roundRect(ctx, x, y, w, h, r) {
