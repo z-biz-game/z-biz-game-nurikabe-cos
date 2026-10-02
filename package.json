@@ -12,7 +12,9 @@
     "check": "for f in $(find js -name '*.js'); do node --check \"$f\" || exit 1; done && node --check server.cjs && node --check electron/main.cjs && node --check electron/preload.cjs && for f in $(find tools -name '*.mjs' -o -name '*.js'); do node --check \"$f\" || exit 1; done && echo OK",
     "test": "node tools/engine-test.mjs",
     "balance": "node tools/balance.mjs",
-    "verify": "bash tools/verify.sh"
+    "verify": "bash tools/verify.sh",
+    "doctest": "node tools/doctest.mjs",
+    "sabotage": "node tools/sabotage.mjs"
   },
   "keywords": [
     "game",

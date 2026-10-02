@@ -149,12 +149,14 @@
 引擎里还有一步 `consolidate`（`js/engine/nurikabe.js:215-248`）：那是岛归属的**记账**，
 不算规则、不进权重，所以它不会出现在提示文案里。
 
-## 跑测试：四条命令各自证明什么
+## 跑测试：六条命令各自证明什么
 
 ```bash
 npm run check              # 逐文件 node --check：全部 js + server.cjs + electron + tools。OK
 node tools/engine-test.mjs # 引擎断言 438/438 通过，8 节（A1 A2 B C D1 D2 D3 E），打累计计数
 SAMPLES=24 node tools/balance.mjs # 难度尺：五档全出货 / 入带率 100% / p50 严格递增，否则 exit 1
+node tools/doctest.mjs     # 文档数字闸：README/DESIGN 每个现值 == 代码或 balance/engine-test 现跑
+node tools/sabotage.mjs    # 破坏试验台账：把每类谎塞回代码，逼对应断言变红，再逐字节复原
 bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL 形态，各 755 条断言 0 失败
 ```
 
@@ -183,15 +185,36 @@ bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL �
 - 一次 `bash tools/verify.sh` 就覆盖两种形态：`verify.sh` 自己在第二个端口上起一个带前缀的服务
   （两种形态与端口列在 `:5-6`）。第二遍不是凑对称——「origin 不同 → localStorage 各一套，
   前缀那一跑才是「换了文档目录」，不是「重装一遍」」是它自己写着的（`:97`，CI 侧同一条理由在
-  `.github/workflows/ci.yml:78-80`）；而且页内的动态 import 特意按 `document.baseURI` 解析
+  `.github/workflows/ci.yml:91-93`）；而且页内的动态 import 特意按 `document.baseURI` 解析
   （`tools/scenarios.js:205-208`），只有前缀这一跑能看见它有没有解错（`tools/verify.sh:15-20`）。
 - `verify.sh` 里有一步"node 重算种子指纹"（`:139-194`）：九行手抄的期望指纹
   （`tools/scenarios.js:20-66`）在 node 里重算一遍，再和浏览器里读到的同一张盘对拍——
   同一颗 seed 必须在 node 和 Chrome 里画出同一张盘。
 - CI（`.github/workflows/ci.yml`）两个 job：`check` = `npm run check` + 测试脚本自身语法 +
-  `engine-test` + `SAMPLES=24 balance` + 入口文件 grep；`browser` = Node 22 上 `bash tools/verify.sh`。
+  `engine-test` + `SAMPLES=24 balance` + 入口文件 grep + `doctest` + `sabotage`；`browser` = Node 22 上 `bash tools/verify.sh`。
   **全程没有 `npm install`**：零运行时依赖、零构建步骤，装依赖只会换来网络抖动。
   `node-version: 22` 是被 `tools/playtest.cjs` 钉的——它用 22+ 才有的全局 `WebSocket`/`fetch`。
+  `doctest` 与 `sabotage` 是纯 node 逻辑闸（不起浏览器、不开端口），CI 的 `check` job 和本地
+  `bash tools/verify.sh` 跑的是同两条命令——本地绿 == CI 绿，没有"只在某一边才跑"的那道。
+
+## 破坏试验台账（4 把刀）
+
+`tools/doctest.mjs` 绿了，"绿"也有两种：被断言真的守住了，和解析器集体扑空（正则改了形状、锚点被
+删空、balance 压根没跑起来）。前者是成绩，后者是假账。唯一的分辨办法是把"文档抄了一个已经不存在的
+数"这类谎一类一类塞回**代码**里，看这道闸是不是立刻变红、并且红的就是文档点名的那一条。
+`tools/sabotage.mjs` 就固化了这四把刀：每把改一个真实代码文件、当场跑 doctest 读回真实 rc、再用内存
+里读回的原始字节 `writeFileSync` 复原（绝不借 git 命令复原），复原后逐字节回读校验；最后不带破坏地对照
+跑一遍 doctest + engine-test，证明台账不是靠把闸改坏来让自己变绿的。
+
+| 刀 | 打哪一组 | 它把什么改坏 | 必须逼红的那条断言 | 真实 rc |
+|---|---|---|---|---|
+| K1 | D1 | `generate.js` 初学档 band 上限 43→42 | 「D1 初学 的 band 34–43 == TIERS 现值」 | 1 |
+| K2 | D2 | `nurikabe.js` 第 7 条规则 bridge 权重 3→2 | 「D2 bridge 的层级/权重 5/3 == Rules 现值」 | 1 |
+| K3 | D7 | `verify.sh` 的 HTTP 默认端口 5311→5312 | 「D7 HTTP 默认号两处一致」 | 1 |
+| K4 | D8 | `index.html` 第一个读数单元 class 改掉（侧栏只剩七个 stat） | 「D8a index.html 解析到 N 个 stat 单元」 | 1 |
+
+每一格的 rc 都是 `node tools/sabotage.mjs` 从子进程读回来的真实读数（不是抄的），自钉回脚本里；干净树
+上重跑只会得到同样的 1，是幂等的。任何一把刀塞了谎 doctest 却仍 rc=0，或红在了别处，台账自己就判红。
 
 ## 技术形态
 

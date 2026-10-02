@@ -341,6 +341,14 @@ run_shape() {
   return $bad
 }
 
+# ---- 逻辑闸（先跑、不开浏览器）：文档数字必须等于代码/现跑读数；台账刀必须逼红再复原 ----
+# doctest / sabotage 与 CI 的 check job 跑的是同两条命令，本地绿 == CI 绿；任何一条红都在这里把
+# 整个 verify 拉红（FAILED 汇总到结尾的 exit $FAILED）。放在浏览器循环之前，逻辑坏了不用等 Chrome。
+echo "=== 逻辑闸 tools/doctest.mjs（文档 == 代码 / balance / engine-test 现跑）==="
+node tools/doctest.mjs || { echo "  doctest 红：文档里有数字不等于代码或闸的现跑值" >&2; FAILED=1; }
+echo "=== 逻辑闸 tools/sabotage.mjs（破坏试验台账：每一类谎都要把对应断言逼红）==="
+node tools/sabotage.mjs || { echo "  sabotage 红：某一类破坏没能把对应断言逼到失败" >&2; FAILED=1; }
+
 SHAPE_LIST="root prefix"
 [ "$CUSTOM" = 1 ] && SHAPE_LIST=custom
 for shape in ${SHAPES:-$SHAPE_LIST}; do

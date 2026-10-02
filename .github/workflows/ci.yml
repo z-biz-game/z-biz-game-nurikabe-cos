@@ -68,6 +68,19 @@ jobs:
           grep -q 'window.nurikabe' js/main.js
           grep -q 'window.App' js/main.js
 
+      # Docs-as-truth, made executable: every number printed into README/DESIGN must equal
+      # the code or a live re-run of this repo's OWN deterministic tools (balance / engine-test).
+      # A green that came from the parsers all missing is not green — the gate self-pins its
+      # group/row count so deleting an assertion cannot keep rc=0. Same command as `npm run doctest`.
+      - name: Doc-number gate (docs == code / live re-run)
+        run: node tools/doctest.mjs
+
+      # Sabotage ledger: inject each class of lie back into the code and prove the doc gate goes
+      # red on the specific assertion the docs name, then restore byte-for-byte (writeFileSync,
+      # never a git command). A class of lie nobody can trip is itself a red. Same as `npm run sabotage`.
+      - name: Sabotage ledger (each lie must trip its named assertion)
+        run: node tools/sabotage.mjs
+
       # What the four steps above do NOT cover: the page actually booting in a real browser
       # (no uncaught exceptions, every element id owned, dirty save files, the canvas pixels
       # matching what the engine claims). That is the `browser` job below.
