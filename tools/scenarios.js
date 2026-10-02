@@ -501,6 +501,16 @@ const CONFLICTS = [
     await wait(1100);
     ck('继续之后用时接着往前走', A().state().elapsedMs >= frozen + 1000, `${frozen} -> ${A().state().elapsedMs}`);
     eq('继续之后遮罩收回去', A().visible().paused, false);
+
+    // 动效层是不是真的按定步长跑、减少动效是不是真的那一条分支：看读数，不看形容词。
+    eq('仿真刻度是 1000/60', A().anim().stepMs, 1000 / 60);
+    A().setMotionReduced(true);
+    eq('减少动效时一个粒子都不建', A().fx(blank), 0);
+    eq('减少动效时 rAF 真的摘掉了', A().anim().running, false);
+    A().setMotionReduced(false);
+    ck('开回动效就有了水花', A().fx(blank) > 0, String(A().fx(blank)));
+    A().Anim.reset(); // 断言用的粒子擦干净：后面所有像素断言都该对着同一张没有水花的盘
+    eq('reset 把粒子与仿真刻度一起归零', `${A().anim().alive},${A().anim().simMs},${A().anim().ticks}`, '0,0,0');
     eq('暂停时落子被挡回', A().tap(at2(0).t, 1), null); // eslint-disable-line
     A().setPaused(false);
     await wait(1100);

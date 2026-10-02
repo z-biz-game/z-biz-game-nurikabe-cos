@@ -6,6 +6,7 @@
 // 数字回答"你点的是哪一格"。两边各算各的，就会出现"画对了、点歪一格"那种最耗人的毛病。
 
 import { Palette, Cell, Radius, Font } from '../theme.js';
+import { Anim } from './anim.js';
 import { WHITE, BLACK } from '../engine/nurikabe.js';
 
 /**
@@ -21,6 +22,12 @@ export function layoutFor(w, h, availW, availH) {
 
 // 云点的位置由格子编号自己决定（不是随机数）：同一块盘重画多少次都长一个样，
 // 撤销/重做也就不会带着一片"每帧换位置"的雪花。
+/** 每格每颗粒的确定哈希：动画与纹理都必须可重放，所以不用 Math.random()。 */
+function speck(t, i, j) {
+  const k = ((t * 2654435761) ^ ((i * 73 + j) * 362437)) >>> 0;
+  return (k % 4096) / 4096;
+}
+
 function cloudOf(t, cell) {
   const k = (t * 2654435761) >>> 0;
   const r = (shift, mod) => ((k >>> shift) % mod) / mod;
@@ -35,7 +42,7 @@ export class BoardView {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.geo = { cell: 0, x: 0, y: 0, w: 0, h: 0, dpr: 1 };
+    this.geo = { cell: 0, x: 0, y: 0, w: 0, h: 0, dpr: 1, cellsW: 0, cellsH: 0 };
     this.game = null;
   }
 
@@ -50,7 +57,7 @@ export class BoardView {
     this.canvas.width = Math.round(size.w * dpr);
     this.canvas.height = Math.round(size.h * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.geo = { cell: l.cell, x: l.pad, y: l.pad, w: size.w, h: size.h, dpr };
+    this.geo = { cell: l.cell, x: l.pad, y: l.pad, w: size.w, h: size.h, dpr, cellsW: l.boardW, cellsH: l.boardH };
     this.game = game;
     return this.geo;
   }
@@ -91,11 +98,49 @@ export class BoardView {
     ctx.fillStyle = Palette.surface;
     ctx.fill();
 
+    // 纸纹：母题是"案上的一张纸"，边框那 14px 是纸面，格子是印在纸上的盘。
+    // 只许画在带里 —— 岛心的纸白和未定的面板底都有一条 tol=8 的像素断言，
+    // 纹理一旦漫进格子，"墨水真的画成了这个颜色"就变成看运气。
+    const grain = Math.max(4, Math.round(cell / 6));
+    ctx.fillStyle = Palette.line;
+    for (let gy = 0; gy < geo.h; gy += grain) {
+      for (let gx = 0; gx < geo.w; gx += grain) {
+        if (gx >= geo.x - 1 && gx <= geo.x + geo.cellsW && gy >= geo.y - 1 && gy <= geo.y + geo.cellsH) continue;
+        const a = speck(gx * 977 + gy, gx / grain | 0, gy / grain | 0);
+        if (a < 0.5) continue;
+        ctx.globalAlpha = 0.12 + (a - 0.5) * 0.5;
+        ctx.fillRect(gx, gy, grain - 1, grain - 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+
     // ---- 底：未定是面板底，墙是最暗的那层。白岛最后盖上来，所以"海"不需要闭合形状。
     for (let t = 0; t < b.n; t++) {
       const r = this.cellRect(t);
       ctx.fillStyle = st.cell[t] === BLACK ? Palette.wall : Palette.unknownCell;
       ctx.fillRect(r.x, r.y, cell, cell);
+    }
+
+    // 海不是死黑一块：按格撒一些 wallEdge 的暗斑（和 assets/gen/make_art.py 的 texture_sea
+    // 是同一套整数哈希），透明度上限压在 0.18 —— 黑格最亮也只比 wall 亮 17 级，
+    // 离撞破红、提示蓝、凑满绿都还在三个色相之外。
+    if (cell >= 8) {
+      const q = 3;
+      const s = cell / q;
+      ctx.fillStyle = Palette.wallEdge;
+      for (let t = 0; t < b.n; t++) {
+        if (st.cell[t] !== BLACK) continue;
+        const r = this.cellRect(t);
+        for (let i = 0; i < q; i++) {
+          for (let j = 0; j < q; j++) {
+            const a = speck(t, i, j);
+            if (a < 0.34) continue;
+            ctx.globalAlpha = 0.05 + (a - 0.34) * 0.2;
+            ctx.fillRect(r.x + i * s, r.y + j * s, s, s);
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
     }
 
     // 云点：数墙的老传统（海上的云），也让一整片黑不至于糊成一块死色。
@@ -210,6 +255,9 @@ export class BoardView {
       roundRect(ctx, 1, 1, geo.w - 2, geo.h - 2, Radius.card - 1);
       ctx.stroke();
     }
+
+    // 落子的水花最后盖上来：它只在 pad 带里跑，格子内部由 Anim 自己夹住。
+    Anim.draw(ctx, geo);
   }
 }
 

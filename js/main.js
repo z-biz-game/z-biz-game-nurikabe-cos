@@ -13,6 +13,7 @@
 
 import { Game, makePuzzle, TIERS, tierByKey, UNKNOWN, WHITE, BLACK, colorName } from './ui/game.js';
 import { BoardView } from './render/board.js';
+import { Anim } from './render/anim.js';
 import { Rules, RULE_ORDER, solve } from './engine/nurikabe.js';
 import { dailySeed } from './engine/rng.js';
 import { KEY, Store, rleDecode } from './store.js';
@@ -136,9 +137,11 @@ function setPaused(on) {
     paused = want;
     if (paused) {
       clockPause();
+      Anim.setHalted(true); // 暂停期间帧照样来，但时间不进累加器：粒子被钉在原地
       drag = null;
       el.pauseMeta.textContent = `这一段停在 ${fmtMs(nowMs())}：用时不再往前，格子也糊住了 —— 数字摆在那儿就不是暂停。`;
     } else {
+      Anim.setHalted(false);
       clockResume();
     }
     syncPause();
@@ -272,6 +275,13 @@ function paint() {
  * 这里原来挂的是 Motion.line 的倒计时（到点就不画），减少动效时 until 直接算成 0 ——
  * 于是"减少动效也照样点名那一格"这句注释自己把它做的事说反了。
  */
+/** 一笔落进海里的那记水花：位置从格子中心换算，Anim 会把它关进最近的 pad 带。 */
+function splashAt(t) {
+  if (!view || !view.geo.cell || t == null || t < 0) return 0;
+  const r = view.cellRect(t);
+  return Anim.splash(view.geo, r.x + r.size / 2, r.y + r.size / 2);
+}
+
 function markPulse(cell, color = null) {
   if (cell == null || cell < 0) return;
   pulse = { cell, color };
@@ -520,6 +530,7 @@ function startPuzzle(originSeed, tierKey, { resume = null, dayKey = null } = {})
     clockReset(0);
   }
   if (!view) view = new BoardView(el.canvas);
+  Anim.reset(); // 上一盘的粒子、仿真刻度都不许带进这一盘
   lastBox = { w: 0, h: 0 }; // 换了一盘，尺寸就得重新量一次：不许沿用上一盘的格子边长
   el.winVeil.hidden = true;
   paused = false;
@@ -591,6 +602,7 @@ function onWin() {
     ? '新纪录：这一局比存档里更不求人。'
     : `未破纪录：这一档最快的是 ${fmtMs(Store.best(game.puzzle.tier).ms)}，先比提示次数。`;
   Sound.win();
+  Anim.celebrate(view && view.geo && view.geo.cellsH ? view.geo : null);
   syncStats();
   paint();
 }
@@ -649,6 +661,7 @@ function tap(t, mode = game && game.mode) {
   pulse = null; // 玩家自己落了子：引擎那句"看这里"就过期了
   Sound[step.value === UNKNOWN ? 'erase' : step.value === BLACK ? 'wall' : 'land']();
   if (game.diag.conflicts > 0) Sound.conflict();
+  splashAt(t);
   afterChange();
   return { cell: t, value: step.value, state: game.state() };
 }
@@ -660,6 +673,7 @@ function stroke(cells, value) {
   if (!step) return null;
   Sound[value === UNKNOWN ? 'erase' : value === BLACK ? 'wall' : 'land']();
   if (game.diag.conflicts > 0) Sound.conflict();
+  splashAt(step.writes[step.writes.length - 1].cell);
   afterChange();
   return { cells: step.writes.map((w) => w.cell), value, state: game.state() };
 }
@@ -737,6 +751,7 @@ function setSound(on) {
 
 function setMotionReduced(on) {
   setReduceMotion(on);
+  Anim.setReduced(!!on); // 不是只加一个 class：粒子清空、rAF 摘下，burst 之后直接返回 0
   Store.setSetting('reduceMotion', !!on);
   document.body.classList.toggle('reduce-motion', !!on);
   el.motionBtn.setAttribute('aria-pressed', String(!!on));
@@ -873,6 +888,7 @@ function bind() {
     paint();
   });
   bindCanvas();
+  Anim.start(() => paint()); // 定步长累加器：dt 只进 accum，粒子只按 SIM_STEP 走
   window.addEventListener('keydown', onKey);
   window.addEventListener('resize', () => {
     relayout();
@@ -994,6 +1010,8 @@ const surface = {
   error: () => lastError,
   // 可安装性：注册结果、装机提示、当前是不是独立窗口 —— 闸读的是这三条，不是 index.html 里有没有 sw.js 字样
   sound: () => ({ enabled: Sound.enabled(), muted: Sound.muted(), ctxState: Sound.ctxState() }),
+  anim: () => Anim.state(),
+  fx: (t) => splashAt(t),
   pwa: () => ({ ...pwaStatus, canInstall: PWA.canInstall(), standalone: PWA.isStandalone(), version: PWA.version }),
   // ---- 动作 ----
   show,
@@ -1015,6 +1033,7 @@ const surface = {
   solveWithLogic,
   setSound,
   setMotionReduced,
+  Anim,
   install: () => PWA.install(),
   togglePause,
   setPaused,
