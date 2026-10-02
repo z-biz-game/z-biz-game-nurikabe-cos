@@ -20,7 +20,13 @@ body { touch-action: manipulation; }
 #app {
   max-width: 1180px;
   margin: 0 auto;
-  padding: var(--space-page) var(--space-page) var(--space-inner);
+  /* 刘海和 home indicator 会把页头第一行和页脚那行小字吃掉，而这一页是 viewport-fit=cover
+     铺满的：所以四个边距各自加上 env(safe-area-inset-*)，不是只补底部。 */
+  padding:
+    calc(var(--space-page) + env(safe-area-inset-top, 0px))
+    calc(var(--space-page) + env(safe-area-inset-right, 0px))
+    calc(var(--space-inner) + env(safe-area-inset-bottom, 0px))
+    calc(var(--space-page) + env(safe-area-inset-left, 0px));
   display: flex;
   flex-direction: column;
   gap: var(--space-card);
@@ -56,7 +62,7 @@ body { touch-action: manipulation; }
   text-transform: uppercase;
 }
 
-.top-actions { display: flex; gap: var(--space-gutter); }
+.top-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-gutter); }
 
 button {
   font: inherit;
@@ -70,6 +76,11 @@ button {
   box-shadow: var(--shadow-level1);
   transition: background var(--dur-tap) var(--ease-ease), border-color var(--dur-tap) var(--ease-ease), transform var(--dur-tap) var(--ease-spring);
 }
+
+/* --touch-min 由 js/theme.js 落进变量里；这一行把同一个下限也写成字面值，并且用
+   #app button 压过 button.link / .chip.hud 那类自带 padding 与 font-size 的规则：
+   宿主（内嵌页、改过 token 的主题）把变量调小，页面上任何一个能点的盒子也不许低于 44px。 */
+#app button { min-height: 44px; }
 
 button:active { transform: translateY(1px); }
 button:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
@@ -288,6 +299,18 @@ main { flex: 1; }
 .chip.proof-count { color: var(--success); border-color: var(--success); }
 .chip.proof-pencil { color: var(--warn); border-color: var(--warn); }
 
+/* 暂停那颗chip 长得像读数、点下去是开关：.chip 的 4px/12px 会让它掉到 44 宽以下，
+   所以这里按 button 的规格补回内距与字号（44px 的高度地板由上面那条 #app button 兜住）。 */
+.chip.hud {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  transition: background var(--dur-tap) var(--ease-ease), border-color var(--dur-tap) var(--ease-ease);
+}
+
+.chip.hud[aria-pressed='true'] { color: var(--warn); border-color: var(--warn); background: var(--accent-soft); }
+
 /* 装得下就居中，装不下就贴左：300px 容器里的 10×10 只能靠 Cell.min 地板保住整格，
    这时纯 center 会把 288px 的画布往两边各甩出去 14px —— 左边那一条是滚不回去的死角，
    玩家看到的永远是"第一列被切掉半格"。safe center 把溢出全落到右边，那里横向滚动够得着。 */
@@ -334,6 +357,65 @@ main { flex: 1; }
 .win-card p { margin: 0 0 8px; font-size: 13px; color: var(--ink-dim); }
 .win-record { color: var(--success) !important; font-weight: 700; }
 .win-actions { display: flex; gap: var(--space-gutter); justify-content: center; }
+
+/* 暂停不是"把计时器停下"就完事：盘面上的数字还摆在那儿，玩家盯着就能继续心算，
+   所以这一层盖在 #board-wrap 上，把格子糊成一整块看不出的东西。 */
+#pause-veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--veil);
+  border-radius: var(--radius-card);
+  backdrop-filter: blur(7px);
+  animation: rise var(--dur-base) var(--ease-ease) both;
+}
+
+.pause-card {
+  text-align: center;
+  padding: var(--space-card);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-card);
+  background: var(--surface-lift);
+  max-width: 82%;
+  box-shadow: var(--shadow-level3);
+}
+
+.pause-card h3 { margin: 0 0 6px; font-size: 19px; }
+.pause-card p { margin: 0 0 12px; font-size: 13px; color: var(--ink-dim); line-height: 1.6; }
+
+/* 玩法教学层：选档页讲"规则是什么"，这一层讲"坐在盘前怎么下手"。 */
+.veil {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--space-page) + env(safe-area-inset-top, 0px)) calc(var(--space-page) + env(safe-area-inset-right, 0px))
+           calc(var(--space-page) + env(safe-area-inset-bottom, 0px)) calc(var(--space-page) + env(safe-area-inset-left, 0px));
+  background: var(--veil);
+  animation: rise var(--dur-base) var(--ease-ease) both;
+}
+
+.veil-card {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--surface-lift);
+  box-shadow: var(--shadow-level3);
+  padding: var(--space-card);
+  width: min(680px, 100%);
+  max-height: 100%;
+  overflow: auto;
+}
+
+.veil-card h3 { margin: 0 0 10px; font-size: 19px; }
+.howto { margin: 0 0 var(--space-inner); padding-left: 22px; font-size: 13.5px; line-height: 1.75; }
+.howto li { margin-bottom: 6px; }
+.howto b { color: var(--accent); }
+.keys { list-style: none; margin: 0 0 var(--space-inner); padding: 0; font-size: 12.5px; line-height: 1.8; color: var(--ink-dim); }
+.keys b { color: var(--ink); }
+.veil-note { margin: 0; font-size: 12px; color: var(--ink-faint); line-height: 1.7; }
+.veil-actions { display: flex; justify-content: flex-end; margin-top: var(--space-inner); }
 
 .panel {
   display: flex;
@@ -444,4 +526,10 @@ main { flex: 1; }
 @media (max-width: 900px) {
   .menu-cols { grid-template-columns: 1fr; }
   .foot { flex-direction: column; align-items: flex-start; }
+}
+
+/* 系统里开了"减弱动态效果"就不等玩家去点那枚按钮：动画直接不放。
+   .reduce-motion 是手动档，这一条是系统档，两条都得在。 */
+@media (prefers-reduced-motion: reduce) {
+  .view, button, #win-veil, #pause-veil, .veil { animation: none; transition: none; }
 }

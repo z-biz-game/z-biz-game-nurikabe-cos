@@ -475,16 +475,42 @@ const CONFLICTS = [
     eq('盘外一像素不落子', A().hitAt(box.left - 1, box.top + 4), -1);
 
     const live = [...document.querySelectorAll('#app button')].filter((x) => x.getClientRects().length > 0);
-    eq('棋局屏上的可点名册', live.map((x) => x.id).join(','), 'btn-sound,btn-motion,btn-mode-wall,btn-mode-land,btn-hint,btn-undo,btn-new,btn-clear,btn-menu,btn-reset');
+    eq('棋局屏上的可点名册', live.map((x) => x.id).join(','), 'btn-sound,btn-motion,btn-fullscreen,btn-help,btn-pause,btn-mode-wall,btn-mode-land,btn-hint,btn-undo,btn-new,btn-clear,btn-menu,btn-reset');
     const small = live.filter((x) => {
       const r = x.getBoundingClientRect();
       return Math.round(r.width) < 44 || Math.round(r.height) < 44;
     }).map((x) => `${x.id} ${Math.round(x.getBoundingClientRect().width)}×${Math.round(x.getBoundingClientRect().height)}`);
     eq('棋局屏上没有到不了 44 的目标', small.join(' | '), '');
+
+    // 暂停是不是真的把这一局按住了，看三件事，不看按钮上那两个字：
+    // 用时不再往前走、盘面被遮罩盖住、落子被挡回引擎之外。
+    eq('暂停前没在暂停', A().visible().paused, false);
+    eq('暂停前没在暂停', A().visible().paused, false);
+    A().setPaused(true);
+    const frozen = A().state().elapsedMs; // 基线在结转之后再取：setPaused 自己就会把当下这段并进 base
+    await wait(1100);
+    eq('暂停后用时一格没多走', A().state().elapsedMs, frozen);
+    eq('暂停时计时芯片就停在这个数上', text('#stat-time'), fmtMs(frozen));
+    eq('暂停把遮罩挂上了盘面', A().visible().paused, true);
+    eq('暂停那枚按钮报的是按下态', $('#btn-pause').getAttribute('aria-pressed'), 'true');
+    eq('暂停那一格遮罩上写着停住的时长', /停在/.test($('#pause-meta').textContent), true);
+    const blank = A().clues().findIndex((c) => !c);
+    eq('暂停时落子根本进不了引擎', A().tap(blank), null);
+    eq('暂停时那一格也没被改动', A().valueOf(blank), A().engine.UNKNOWN);
+    A().setPaused(false);
+    await wait(1100);
+    ck('继续之后用时接着往前走', A().state().elapsedMs >= frozen + 1000, `${frozen} -> ${A().state().elapsedMs}`);
+    eq('继续之后遮罩收回去', A().visible().paused, false);
+    eq('暂停时落子被挡回', A().tap(at2(0).t, 1), null); // eslint-disable-line
+    A().setPaused(false);
+    await wait(1100);
+    const after = A().state().elapsedMs;
+    ck('解除暂停后用时重新往前走', after >= before + 1000, `${before} -> ${after}`);
+    eq('解除暂停把遮罩收掉了', A().visible().paused, false);
     A().show('menu');
     await wait(40);
     eq('选档屏上的可点名册', [...document.querySelectorAll('#app button')].filter((x) => x.getClientRects().length > 0).map((x) => x.id || `档位卡:${x.dataset.tier}`).join(','),
-      'btn-sound,btn-motion,档位卡:novice,档位卡:skilled,档位卡:regular,档位卡:expert,档位卡:master,档位卡:daily,btn-reset');
+      'btn-sound,btn-motion,btn-fullscreen,btn-help,档位卡:novice,档位卡:skilled,档位卡:regular,档位卡:expert,档位卡:master,档位卡:daily,btn-reset');
     eq('选档屏上没有到不了 44 的目标', [...document.querySelectorAll('#app button')].filter((x) => {
       const r = x.getBoundingClientRect();
       return r.width > 0 && (Math.round(r.width) < 44 || Math.round(r.height) < 44);
@@ -505,8 +531,8 @@ const CONFLICTS = [
       getComputedStyle($('.sw-free')).boxShadow);
     ck('统计行八项', document.querySelectorAll('.stats .stat').length === 8, String(document.querySelectorAll('.stats .stat').length));
     ck('图例六项', document.querySelectorAll('.legend span').length === 6, String(document.querySelectorAll('.legend span').length));
-    eq('键盘说明与页面同一套（就是那六个键位）', text('.keyhint'),
-      '拖动 连续落子 · 从同色上起笔 就是擦 · 1 墙 · 2 岛 · M 换 · H 提示 · Z 撤销');
+    eq('键盘说明与页面同一套（十一个键位，M 是静音不是换颜色）', text('.keyhint'),
+      '拖动 连续落子 · 从同色上起笔 就是擦 · 1 墙 · 2 岛 · X 换 · H 提示 · Z 撤销 · P 暂停 · R 重开 · M 静音 · F 全屏 · ? 玩法');
     eq('场景收工前页面仍然活着', A().state().originSeed, 'scn|novice|0');
     return report({ version: A().version, cell: geo.cell, dpr: geo.dpr, cards: cards.length });
   };

@@ -30,6 +30,9 @@ const el = {
   app: $('#app'),
   soundBtn: $('#btn-sound'),
   motionBtn: $('#btn-motion'),
+  fullscreenBtn: $('#btn-fullscreen'),
+  helpBtn: $('#btn-help'),
+  installBtn: $('#btn-install'),
   viewMenu: $('#view-menu'),
   tiers: $('#tier-list'),
   resumeCard: $('#resume-card'),
@@ -43,6 +46,10 @@ const el = {
   tier: $('#stat-tier'),
   proof: $('#stat-proof'),
   time: $('#stat-time'),
+  pauseBtn: $('#btn-pause'),
+  pauseVeil: $('#pause-veil'),
+  pauseMeta: $('#pause-meta'),
+  pauseResumeBtn: $('#btn-pause-resume'),
   // wrap 是画布的定位父级（遮罩盖它），stage 才是量宽度该量的那个盒子：
   // #board-wrap 是 align-self:center 的 shrink-to-fit，从它自己量会跟画布尺寸互相定义。
   wrap: $('#board-wrap'),
@@ -72,6 +79,8 @@ const el = {
   hintRule: $('#hint-rule'),
   hintLine: $('#hint-line'),
   resetBtn: $('#btn-reset'),
+  helpVeil: $('#help-veil'),
+  helpCloseBtn: $('#btn-help-close'),
 };
 
 let game = null;
@@ -108,7 +117,80 @@ function clockPause() {
 }
 
 function clockResume() {
+  if (paused) return; // 玩家按了暂停：这一段谁都不许替他把累计器重新点起来
   if (!clockFrom && game && game.status === 'playing') clockFrom = Date.now();
+}
+
+// ---- 暂停 / 全屏 / 玩法教学 ---------------------------------------------------------------------
+
+let paused = false;
+
+/**
+ * 暂停要停的是"这一局还在往前跑"这件事：用时结转到累计器里、手里那一笔作废、
+ * 盘面被遮罩糊住（数字还看得见就还能心算，那就不叫暂停）、暂停期间任何落子都被挡回。
+ * 切到后台那条走的是 clockPause()，和这里的区别只在于它不遮盘面、也不拦落子。
+ */
+function setPaused(on) {
+  const want = !!on && !!game && game.status === 'playing';
+  if (paused !== want) {
+    paused = want;
+    if (paused) {
+      clockPause();
+      drag = null;
+      el.pauseMeta.textContent = `这一段停在 ${fmtMs(nowMs())}：用时不再往前，格子也糊住了 —— 数字摆在那儿就不是暂停。`;
+    } else {
+      clockResume();
+    }
+    syncPause();
+    paint();
+  }
+  return paused;
+}
+
+function togglePause() {
+  return setPaused(!paused);
+}
+
+function syncPause() {
+  el.pauseVeil.hidden = !paused;
+  el.pauseBtn.setAttribute('aria-pressed', String(paused));
+  el.pauseBtn.textContent = paused ? '继续' : '暂停';
+}
+
+/** 全屏是不是真的开了，只看 document.fullscreenElement，不看按钮上那两个字。 */
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+  } catch {
+    /* 被宿主拒绝（内嵌页没给 allowfullscreen、iOS Safari 只让 video 元素全屏）：
+       界面留在原样，这不是一次失败，所以不抛也不 console.error。 */
+  }
+  syncFullscreen();
+  return !!document.fullscreenElement;
+}
+
+function syncFullscreen() {
+  const on = !!document.fullscreenElement;
+  el.fullscreenBtn.setAttribute('aria-pressed', String(on));
+  el.fullscreenBtn.textContent = on ? '退出全屏' : '全屏';
+}
+
+function setHelp(on) {
+  el.helpVeil.hidden = !on;
+  el.helpBtn.setAttribute('aria-pressed', String(!!on));
+  return !el.helpVeil.hidden;
+}
+
+function toggleHelp() {
+  return setHelp(el.helpVeil.hidden);
+}
+
+/** 键盘开局：有没打完的一局就先接上它，否则开第一档 —— 和玩家用鼠标做的是同一条路。 */
+function startFromMenu() {
+  if (Store.resume()) resumeSaved();
+  else beginTier(TIERS[0].key);
+  return !el.viewGame.hidden;
 }
 
 function fmtMs(ms) {
@@ -347,6 +429,8 @@ function show(which) {
   el.viewGame.hidden = which !== 'game';
   el.app.dataset.view = which;
   if (which === 'menu') {
+    paused = false;
+    syncPause();
     stopClock();
     flushResume();
     renderMenu();
@@ -438,6 +522,8 @@ function startPuzzle(originSeed, tierKey, { resume = null, dayKey = null } = {})
   if (!view) view = new BoardView(el.canvas);
   lastBox = { w: 0, h: 0 }; // 换了一盘，尺寸就得重新量一次：不许沿用上一盘的格子边长
   el.winVeil.hidden = true;
+  paused = false;
+  syncPause();
   el.canvas.dataset.mode = game.mode === BLACK ? 'wall' : 'land';
   syncModeButtons();
   resetHintBox();
@@ -490,6 +576,8 @@ function restart() {
 }
 
 function onWin() {
+  paused = false;
+  syncPause();
   clockPause();
   const ms = nowMs();
   const size = `${game.w}×${game.h}`;
@@ -555,7 +643,7 @@ function afterChange() {
 }
 
 function tap(t, mode = game && game.mode) {
-  if (!game || t < 0) return null;
+  if (!game || paused || t < 0) return null;
   const step = game.tap(t, mode === undefined ? game.mode : mode);
   if (!step) return null;
   pulse = null; // 玩家自己落了子：引擎那句"看这里"就过期了
@@ -567,7 +655,7 @@ function tap(t, mode = game && game.mode) {
 
 /** 一整笔（一次手势）：只留一条快照，撤销撤得掉一整笔而不是一格。 */
 function stroke(cells, value) {
-  if (!game || !Array.isArray(cells) || !cells.length) return null;
+  if (!game || paused || !Array.isArray(cells) || !cells.length) return null;
   const step = game.stroke(cells, value);
   if (!step) return null;
   Sound[value === UNKNOWN ? 'erase' : value === BLACK ? 'wall' : 'land']();
@@ -577,7 +665,7 @@ function stroke(cells, value) {
 }
 
 function hint() {
-  if (!game) return null;
+  if (!game || paused) return null;
   const h = game.hint();
   if (!h) return null;
   if (h.conflict) {
@@ -603,7 +691,7 @@ function hint() {
 }
 
 function undo() {
-  if (!game) return null;
+  if (!game || paused) return null;
   const step = game.undo();
   if (!step) return null;
   Sound.undo();
@@ -618,7 +706,7 @@ function undo() {
  * 提示撤回来还是提示（Game.undo 有意如此），所以这一键不会把"求过几次人"洗白。
  */
 function clearInk() {
-  if (!game) return null;
+  if (!game || paused) return null;
   let n = 0;
   while (game.undo()) n++;
   Sound.erase();
@@ -633,7 +721,7 @@ function clearInk() {
  * 绿环、胜利横幅全都不动，玩家看着一个"已经赢了却没赢"的盘。
  */
 function solveWithLogic(cap) {
-  if (!game) return null;
+  if (!game || paused) return null;
   const res = game.solveWithLogic({ cap });
   afterChange();
   return res;
@@ -664,6 +752,8 @@ function resetSave() {
   drag = null;
   view = null;
   stopClock();
+  paused = false;
+  syncPause();
   applySettings();
   el.winVeil.hidden = true;
   show('menu');
@@ -673,7 +763,7 @@ function resetSave() {
 // ---- 输入：画布（拖动落子，起笔在同色上就是擦） -------------------------------------------------
 
 function beginDrag(ev) {
-  if (!game) return;
+  if (!game || paused) return;
   const t = view && view.geo.cell ? view.hitCell(ev.clientX, ev.clientY) : -1;
   if (t < 0) return;
   ev.preventDefault();
@@ -726,15 +816,28 @@ function bindCanvas() {
 
 function onKey(ev) {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
-  if (ev.target && /input|textarea|select/i.test(ev.target.tagName)) return;
+  const node = ev.target;
+  if (node && /input|textarea|select/i.test(node.tagName)) return;
+  // 焦点停在某枚按钮上时，回车/空格的意思是"按下那枚按钮"，全局快捷键不许把它抢走。
+  const onControl = !!(node && /^(button|a)$/i.test(node.tagName));
   const k = ev.key;
   if (k === '1') setMode(BLACK);
   else if (k === '2') setMode(WHITE);
-  else if (k === 'm' || k === 'M') toggleMode();
+  else if (k === 'x' || k === 'X') toggleMode();
   else if (k === 'h' || k === 'H') hint();
   else if (k === 'z' || k === 'Z') undo();
-  else if (k === 'Escape' && !el.viewGame.hidden) show('menu');
-  else return;
+  else if (k === 'm' || k === 'M') setSound(!Sound.enabled()); // M 是静音，不是换手里的颜色
+  else if (k === 'p' || k === 'P') { if (game) togglePause(); }
+  else if (k === 'r' || k === 'R') { if (game) restart(); }
+  else if (k === 'f' || k === 'F') toggleFullscreen();
+  else if (k === '?') toggleHelp();
+  else if (k === ' ') { if (el.viewGame.hidden) startFromMenu(); else if (game) togglePause(); }
+  else if (k === 'Enter') { if (!onControl && el.viewGame.hidden) startFromMenu(); else return; }
+  else if (k === 'Escape') {
+    if (!el.helpVeil.hidden) setHelp(false);
+    else if (!el.viewGame.hidden) show('menu');
+    else return;
+  } else return;
   ev.preventDefault();
 }
 
@@ -754,6 +857,21 @@ function bind() {
   el.menu2Btn.addEventListener('click', () => show('menu'));
   el.resumeBtn.addEventListener('click', () => resumeSaved());
   el.resetBtn.addEventListener('click', resetSave);
+  el.fullscreenBtn.addEventListener('click', toggleFullscreen);
+  el.helpBtn.addEventListener('click', toggleHelp);
+  el.helpCloseBtn.addEventListener('click', () => setHelp(false));
+  el.pauseBtn.addEventListener('click', togglePause);
+  el.pauseResumeBtn.addEventListener('click', () => setPaused(false));
+  el.installBtn.addEventListener('click', async () => {
+    await PWA.install();
+    el.installBtn.hidden = !PWA.canInstall(); // 提示被收回（已装过/被取消）就退回普通网页态
+  });
+  // 全屏换了的是视口高：画布边长照可用盒算，这里必须强制重量一次，否则盘还是上一尺寸的格子。
+  document.addEventListener('fullscreenchange', () => {
+    syncFullscreen();
+    relayout(true);
+    paint();
+  });
   bindCanvas();
   window.addEventListener('keydown', onKey);
   window.addEventListener('resize', () => {
@@ -792,6 +910,10 @@ show('menu');
 // PWA：注册结果是一条**读数**，不是异常。file://、隐私模式、Pages 未部署都会走到 ok:false，
 // 界面与验证台读到的都是同一句原话（js/pwa.js 里那条 reason）。
 let pwaStatus = { ok: false, reason: '尚未注册' };
+el.installBtn.hidden = !PWA.canInstall(); // 没有 beforeinstallprompt 就没这条通路，按钮不许先亮着许诺
+PWA.onPrompt = (yes) => {
+  el.installBtn.hidden = !yes;
+};
 PWA.watchPrompt();
 PWA.register().then((r) => {
   pwaStatus = r;
@@ -846,7 +968,7 @@ const surface = {
     resumeMeta: el.resumeMeta.textContent,
     menuNote: lastError || '',
   }),
-  visible: () => ({ menu: !el.viewMenu.hidden, game: !el.viewGame.hidden, won: !el.winVeil.hidden, resume: !el.resumeCard.hidden }),
+  visible: () => ({ menu: !el.viewMenu.hidden, game: !el.viewGame.hidden, won: !el.winVeil.hidden, resume: !el.resumeCard.hidden, paused: !el.pauseVeil.hidden, help: !el.helpVeil.hidden, fullscreen: !!document.fullscreenElement, install: !el.installBtn.hidden }),
   geometry: () =>
     view && view.geo.cell
       ? { ...view.geo, cssWidth: el.canvas.clientWidth, cssHeight: el.canvas.clientHeight, box: availBox(), touchMin: Cell.min }
@@ -871,6 +993,7 @@ const surface = {
   lastGeneration: () => lastGeneration,
   error: () => lastError,
   // 可安装性：注册结果、装机提示、当前是不是独立窗口 —— 闸读的是这三条，不是 index.html 里有没有 sw.js 字样
+  sound: () => ({ enabled: Sound.enabled(), muted: Sound.muted(), ctxState: Sound.ctxState() }),
   pwa: () => ({ ...pwaStatus, canInstall: PWA.canInstall(), standalone: PWA.isStandalone(), version: PWA.version }),
   // ---- 动作 ----
   show,
@@ -893,6 +1016,12 @@ const surface = {
   setSound,
   setMotionReduced,
   install: () => PWA.install(),
+  togglePause,
+  setPaused,
+  toggleFullscreen,
+  toggleHelp,
+  setHelp,
+  startFromMenu,
   resetSave,
   flushResume,
   syncAll,

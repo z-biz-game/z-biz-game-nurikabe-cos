@@ -42,6 +42,9 @@
     <div class="top-actions">
       <button id="btn-sound" class="ghost" type="button" aria-pressed="true">音效 开</button>
       <button id="btn-motion" class="ghost" type="button" aria-pressed="false">动效 全</button>
+      <button id="btn-fullscreen" class="ghost" type="button" aria-pressed="false">全屏</button>
+      <button id="btn-help" class="ghost" type="button" aria-pressed="false">玩法</button>
+      <button id="btn-install" class="ghost" type="button" hidden>安装到桌面</button>
     </div>
   </header>
 
@@ -93,9 +96,17 @@
           <span id="stat-tier" class="chip">—</span>
           <span id="stat-proof" class="chip">证明 —</span>
           <span id="stat-time" class="chip mono">00:00</span>
+          <button id="btn-pause" class="chip hud" type="button" aria-pressed="false">暂停</button>
         </div>
         <div id="board-wrap">
           <canvas id="board" data-mode="wall" role="img" aria-label="数墙盘面：拖动落墙或落岛"></canvas>
+          <div id="pause-veil" hidden>
+            <div class="pause-card">
+              <h3>这一局停在这里</h3>
+              <p id="pause-meta">用时不再往前走，盘面也遮起来 —— 数字摆在那儿就不是暂停。</p>
+              <button id="btn-pause-resume" class="primary" type="button">继续这一局</button>
+            </div>
+          </div>
           <div id="win-veil" hidden>
             <div class="win-card">
               <h3>岛都凑满，墙是一整块</h3>
@@ -148,10 +159,32 @@
           <span><i class="sw sw-done"></i>凑满的岛</span>
           <span><i class="sw sw-bad"></i>撞破规则</span>
         </div>
-        <p class="keyhint"><b>拖动</b> 连续落子 · <b>从同色上起笔</b> 就是擦 · <b>1</b> 墙 · <b>2</b> 岛 · <b>M</b> 换 · <b>H</b> 提示 · <b>Z</b> 撤销</p>
+        <p class="keyhint"><b>拖动</b> 连续落子 · <b>从同色上起笔</b> 就是擦 · <b>1</b> 墙 · <b>2</b> 岛 · <b>X</b> 换 · <b>H</b> 提示 · <b>Z</b> 撤销 · <b>P</b> 暂停 · <b>R</b> 重开 · <b>M</b> 静音 · <b>F</b> 全屏 · <b>?</b> 玩法</p>
       </aside>
     </section>
   </main>
+
+  <!-- 玩法教学：选档页写着规则原文，这一层是"坐在盘前怎么下手"。默认收着，? / 玩法 才展开。 -->
+  <div id="help-veil" class="veil" hidden>
+    <div class="veil-card">
+      <h3>三步上手：数字是岛的格数，其余全是海</h3>
+      <ol class="howto">
+        <li><b>先给每个数字量出边界。</b>数字 N 的岛一共 N 格，所以它四周凡是"再多一格就凑不下"的方向，那一格必须是海。</li>
+        <li><b>两个数字靠得太近，中间一定是海。</b>两座岛不能连成一座（一个岛只许有一个数字），所以相邻数字的曼哈顿距离小于两者格数之和时，它们之间必须隔开。</li>
+        <li><b>海必须是一整块。</b>哪一块黑格被白岛围成了孤岛，就是撞了规则；同理任何一个 2×2 不许四格全黑。</li>
+      </ol>
+      <ul class="keys">
+        <li><b>拖动</b> 一笔连涂同一种颜色 · <b>起笔在同色上</b> 这一笔就是擦</li>
+        <li><b>1</b> 落墙 · <b>2</b> 落岛 · <b>X</b> 换手里的那种 · <b>H</b> 要一条线索 · <b>Z</b> 撤销一整笔</li>
+        <li><b>P</b> 或 <b>空格</b> 暂停（用时停走、盘面遮住） · <b>R</b> 同一张盘清空重来 · <b>Enter</b> 开局</li>
+        <li><b>M</b> 静音（真的把音频上下文挂起） · <b>F</b> 全屏 · <b>?</b> 这一页 · <b>Esc</b> 回选档</li>
+      </ul>
+      <p class="veil-note">提示只说线索当前真的逼得出的一格；你自己画反了的那一格，提示会拒绝落子也不计费。</p>
+      <div class="veil-actions">
+        <button id="btn-help-close" class="primary" type="button">知道了，开始推</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="foot">
     <span>每局唯一解 · 每局可用逻辑推到底 · 提示只给推得出的一步 — 由 <code>tools/verify.sh</code> 在真实浏览器里逐条断言。</span>

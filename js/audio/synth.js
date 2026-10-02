@@ -4,7 +4,7 @@
 
 let ctx = null;
 let master = null;
-let enabled = true;
+let sfxEnabled = true;
 
 function audio() {
   if (typeof AudioContext === 'undefined' && typeof webkitAudioContext === 'undefined') return null;
@@ -19,15 +19,31 @@ function audio() {
       return null;
     }
   }
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  if (sfxEnabled && ctx.state === 'suspended') ctx.resume().catch(() => {});
   return ctx;
+}
+
+/**
+ * 静音真的把音频上下文挂起，而不是把音量拧成 0：
+ * master.gain = 0 之后，浏览器里那条音频线程照样在跑、照样在每个音效上
+ * 排一次振荡器建链，只是听不见 —— 那叫音量旋钮，不叫静音。
+ */
+function applyMute() {
+  if (!ctx) return; // 还没建过上下文：静音就是"以后也不许建"，由 tone() 那道的 sfxEnabled 拦
+  try {
+    if (!sfxEnabled) ctx.suspend().catch(() => {});
+    else ctx.resume().catch(() => {});
+  } catch {
+    /* 老 WebKit 上 suspend/resume 可能是同步的或直接不存在：状态照样能从 ctx.state 读到 */
+  }
 }
 
 // 一个振荡器 + 两点音高滑移 + 指数衰减。下面所有声音都是对它的一次调用：
 // 加第二种"声部形状"就是这么让一个游戏长出不属于同一件乐器的声音的。
 function tone({ f0, f1 = f0, dur = 0.12, type = 'sine', gain = 0.22, delay = 0 }) {
+  if (!sfxEnabled) return; // 静音时连上下文都不碰：一句"响过但没听见"都不该发生
   const ac = audio();
-  if (!ac || !enabled) return;
+  if (!ac) return;
   const t = ac.currentTime + delay;
   const osc = ac.createOscillator();
   const vol = ac.createGain();
@@ -44,9 +60,19 @@ function tone({ f0, f1 = f0, dur = 0.12, type = 'sine', gain = 0.22, delay = 0 }
 
 export const Sound = {
   setEnabled(v) {
-    enabled = !!v;
+    sfxEnabled = !!v;
+    applyMute();
+    return sfxEnabled;
   },
-  enabled: () => enabled,
+  enabled: () => sfxEnabled,
+  muted: () => !sfxEnabled,
+  toggleMute() {
+    Sound.setEnabled(!sfxEnabled);
+    return sfxEnabled;
+  },
+  // 上下文此刻的真实状态：'none'（还没被第一个音效建起来）/'running'/'suspended'。
+  // 静音是不是真的做下去了，读这一条，不读按钮上的字。
+  ctxState: () => (ctx ? ctx.state : 'none'),
 
   // 墙落下去：低、闷，像把一块石板按平。
   wall() {
