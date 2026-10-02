@@ -56,6 +56,12 @@ jobs:
       - name: Balance ladder (measured bands, per tier)
         run: SAMPLES=24 node tools/balance.mjs
 
+      # 帧率无关不是"有个 dt 变量"就算做了：官方 cos_frame_probe.js 对 ESM 仓只会说
+      # "无法比对"，而 tools/frame_harness.mjs 自己造时钟（30/60/120Hz + 抖动档、按仿真刻度
+      # 对齐）并把两条阴性对照钉在会红的行上 —— 一台量不出红色的量具不算量具。
+      - name: Frame-rate harness (dt independence + negative controls)
+        run: node tools/frame_harness.mjs
+
       # The entry graph must be reachable: index.html loads js/main.js as a module, and
       # that file is what mounts window.nurikabe (the surface the browser gate reads).
       # A missing entry file used to pass CI silently because nothing checked it existed.

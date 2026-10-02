@@ -86,6 +86,10 @@ function shapeOf(raw) {
   if (!Number.isInteger(raw.elapsedMs) || raw.elapsedMs < 0) return null;
   const board = rleDecode(raw.ink, raw.cells);
   if (!board) return null;
+  // 数墙的墨只有 0 未定 / 1 白岛 / 2 黑墙三种取值。RLE 解码器管的是"字节游程"这种通用形状，
+  // 0..255 都收；而一个 3 混进盘面会画成一块既不是岛也不是墙的格子，diagnose() 只认三种颜色，
+  // 于是这一档看着像进度，推下去却永远对不上账 —— 这种档宁可当作没有。
+  for (let i = 0; i < board.length; i++) if (board[i] > 2) return null;
   return { ...raw, board };
 }
 
