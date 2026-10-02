@@ -68,6 +68,16 @@ jobs:
           grep -q 'window.nurikabe' js/main.js
           grep -q 'window.App' js/main.js
 
+      # The icon/PWA promise as a red build instead of an adjective: every local path
+      # index.html and manifest.json reference must exist on disk, every .png must carry a
+      # real PNG signature with IHDR matching the size it claims, apple-touch-icon must be
+      # one unique ≥180px bitmap, and sw.js must be versioned + network-first. This catches
+      # the three fake-greens this family has actually shipped: an inline data-URI SVG
+      # standing in for "we have an icon", a manifest pointing at pngs that were never
+      # committed, and a 0-byte placeholder that passes an existence check.
+      - name: Art assets are real bitmaps and every reference resolves
+        run: node tools/check_assets.mjs
+
       # What the four steps above do NOT cover: the page actually booting in a real browser
       # (no uncaught exceptions, every element id owned, dirty save files, the canvas pixels
       # matching what the engine claims). That is the `browser` job below.

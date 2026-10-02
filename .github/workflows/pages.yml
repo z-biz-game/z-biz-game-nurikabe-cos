@@ -20,14 +20,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # No bundler and no build step: the game ships plain ES modules, so the site is a
-      # file copy. Only these three paths are reachable from index.html — keeping the
-      # server, the electron shell, the tools harness and the docs out of the artifact
-      # also keeps it honest about what the browser is actually allowed to load.
+      # file copy. What gets copied is the set of paths the page actually reaches at
+      # runtime: css/game.css and js/*.js, manifest.json (linked from the head), sw.js
+      # (registered by js/pwa.js), icons/*.png (favicon 32/16, apple-touch-icon 180,
+      # PWA 192/512/maskable) and assets/img/*.png (the sea/paper textures the canvas
+      # loads plus og-cover.png for crawlers). Leaving one out does not fail the build —
+      # it 404s a single line in a real browser, which is exactly how "installable PWA"
+      # stayed a claim about a file that was never deployed. assets/gen/ is the art
+      # factory (source, not artifact) and stays out of the artifact on purpose.
       - name: Assemble static site
         run: |
-          mkdir _site
-          cp index.html _site/
-          cp -r css js _site/
+          mkdir -p _site/assets
+          cp index.html manifest.json sw.js _site/
+          cp -r css js icons _site/
+          cp -r assets/img _site/assets/
+          find _site -type f | sort
       - uses: actions/configure-pages@v5
         # How to make a brand-new repo's first push deploy was measured twice here, and the
         # workflow cannot do it itself. No Pages site yet → this step 404s on GET /pages and

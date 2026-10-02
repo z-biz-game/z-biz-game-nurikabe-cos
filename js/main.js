@@ -17,6 +17,7 @@ import { Rules, RULE_ORDER, solve } from './engine/nurikabe.js';
 import { dailySeed } from './engine/rng.js';
 import { KEY, Store, rleDecode } from './store.js';
 import { Sound } from './audio/synth.js';
+import { PWA } from './pwa.js';
 import { Cell, Motion, Space, applyThemeVars, prefersReducedMotion, setReduceMotion } from './theme.js';
 
 const VERSION = '1.0.0';
@@ -788,6 +789,14 @@ bind(); // 先挂监听，再渲染：菜单一出现就得能点（13 个按钮
 renderMenu();
 show('menu');
 
+// PWA：注册结果是一条**读数**，不是异常。file://、隐私模式、Pages 未部署都会走到 ok:false，
+// 界面与验证台读到的都是同一句原话（js/pwa.js 里那条 reason）。
+let pwaStatus = { ok: false, reason: '尚未注册' };
+PWA.watchPrompt();
+PWA.register().then((r) => {
+  pwaStatus = r;
+});
+
 // ---- 交给验证台 -------------------------------------------------------------------------------
 //
 // **下面挂出来的这一面，就是浏览器闸能读到的全部范围**：想断言一个读不到、
@@ -861,6 +870,8 @@ const surface = {
   },
   lastGeneration: () => lastGeneration,
   error: () => lastError,
+  // 可安装性：注册结果、装机提示、当前是不是独立窗口 —— 闸读的是这三条，不是 index.html 里有没有 sw.js 字样
+  pwa: () => ({ ...pwaStatus, canInstall: PWA.canInstall(), standalone: PWA.isStandalone(), version: PWA.version }),
   // ---- 动作 ----
   show,
   renderMenu,
@@ -881,6 +892,7 @@ const surface = {
   solveWithLogic,
   setSound,
   setMotionReduced,
+  install: () => PWA.install(),
   resetSave,
   flushResume,
   syncAll,
