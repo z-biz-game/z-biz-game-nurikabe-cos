@@ -959,3 +959,16 @@ window.App = surface; // 同组织样板的通用别名：验证台可以不分�
   window.addEventListener('MSFullscreenChange', sync);
   sync();
 })();
+
+// ---- 静音开关（N）-----------------------------------------------------------------
+// M 在本仓已被玩法占用（见 keydown 里的模式切换），所以静音走 N。
+// 这里只负责把按键翻译成"点一下音效按钮"：真静音在 js/audio/synth.js 里做
+// （suspend AudioContext + 静音态不再新建振荡器节点），偏好由它落盘到 localStorage。
+window.addEventListener('keydown', (ev) => {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (ev.target && /^(input|textarea|select)$/i.test(ev.target.tagName || '')) return;
+  if (ev.key === 'n' || ev.key === 'N') {
+    ev.preventDefault();
+    $('#btn-sound').click();
+  }
+});
