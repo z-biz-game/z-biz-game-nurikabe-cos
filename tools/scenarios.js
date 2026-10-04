@@ -475,7 +475,7 @@ const CONFLICTS = [
     eq('盘外一像素不落子', A().hitAt(box.left - 1, box.top + 4), -1);
 
     const live = [...document.querySelectorAll('#app button')].filter((x) => x.getClientRects().length > 0);
-    eq('棋局屏上的可点名册', live.map((x) => x.id).join(','), 'btn-sound,btn-motion,btn-mode-wall,btn-mode-land,btn-hint,btn-undo,btn-new,btn-clear,btn-menu,btn-reset');
+    eq('棋局屏上的可点名册', live.map((x) => x.id).join(','), 'btn-sound,btn-motion,btn-fullscreen,btn-mode-wall,btn-mode-land,btn-hint,btn-undo,btn-new,btn-clear,btn-menu,btn-reset');
     const small = live.filter((x) => {
       const r = x.getBoundingClientRect();
       return Math.round(r.width) < 44 || Math.round(r.height) < 44;
@@ -484,7 +484,7 @@ const CONFLICTS = [
     A().show('menu');
     await wait(40);
     eq('选档屏上的可点名册', [...document.querySelectorAll('#app button')].filter((x) => x.getClientRects().length > 0).map((x) => x.id || `档位卡:${x.dataset.tier}`).join(','),
-      'btn-sound,btn-motion,档位卡:novice,档位卡:skilled,档位卡:regular,档位卡:expert,档位卡:master,档位卡:daily,btn-reset');
+      'btn-sound,btn-motion,btn-fullscreen,档位卡:novice,档位卡:skilled,档位卡:regular,档位卡:expert,档位卡:master,档位卡:daily,btn-reset');
     eq('选档屏上没有到不了 44 的目标', [...document.querySelectorAll('#app button')].filter((x) => {
       const r = x.getBoundingClientRect();
       return r.width > 0 && (Math.round(r.width) < 44 || Math.round(r.height) < 44);
