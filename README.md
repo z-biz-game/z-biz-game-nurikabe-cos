@@ -251,7 +251,7 @@ js/store.js             localStorage 单键存档：RLE 墨 + 原点 seed + 逐�
 js/theme.js             颜色/间距/时长，CSS 变量的唯一来源
 js/audio/synth.js       WebAudio 现场合成的落子音
 js/main.js              装配与读数同步：一条规则都不写在这里
-tools/                  engine-test / balance / playtest(CDP) / scenarios / verify.sh / tools/assemble-site / tools/deploy-set / tools/deploy-set-selftest
+tools/                  engine-test / balance / playtest(CDP) / scenarios / verify.sh / assemble-site.sh / deploy-set.mjs / deploy-set-selftest.mjs
 server.cjs              零依赖静态服务（5311）
 electron/               桌面壳（同一份代码，无构建）
 tools/assemble-site.sh  部署产物的唯一清单（pages.yml 与本地闸调同一支）

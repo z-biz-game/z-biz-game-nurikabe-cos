@@ -97,7 +97,7 @@ if [ "$CUSTOM" = 0 ]; then
   echo "  两种形态各用一个端口：origin 不同 → localStorage 各一套，前缀那一跑才是"换了文档目录"，不是"重装一遍""
 else
   CDP=${CDP_PORT:-9361}
-  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP $CDP）"
+  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP ${CDP}）"
 fi
 echo "logs: $LOGDIR"
 
@@ -240,7 +240,7 @@ preflight() {
   local served
   served=$(curl -fsS -m 8 "$base" 2>/dev/null) || { echo "  首页取不到：$base" >&2; return 1; }
   case "$served" in *js/main.js*) ;; *) echo "  $base 上发的不是本仓的首页（正文里找不到 js/main.js）" >&2; return 1 ;; esac
-  case "$served" in *"$FEATURE"*) ;; *) echo "  $base 在发别的应用：首页正文里找不到「$FEATURE」" >&2; return 1 ;; esac
+  case "$served" in *"$FEATURE"*) ;; *) echo "  $base 在发别的应用：首页正文里找不到「${FEATURE}」" >&2; return 1 ;; esac
   for rel in js/main.js js/ui/game.js js/engine/nurikabe.js js/engine/count.js css/game.css; do
     want=$(wc -c < "$HERE/$rel" | tr -d ' ')
     [ -n "$want" ] || { echo "  $rel 在磁盘上读不到，闸没有可对的基准" >&2; return 1; }
@@ -248,11 +248,11 @@ preflight() {
     got=$(curl -sS -m 8 -o "$f" -w '%{http_code} %{size_download}' "$base$rel" 2>/dev/null) || {
       echo "  $rel 取不回来：$base$rel" >&2; return 1; }
     case "$got" in "200 $want") ;; *)
-      echo "  $rel 不对味：$base$rel 回 $got，磁盘上的这份是 200 $want 字节" >&2
+      echo "  $rel 不对味：$base$rel 回 ${got}，磁盘上的这份是 200 $want 字节" >&2
       echo "  前两行到手内容：$(head -c 160 "$f" | tr '\n' ' ')" >&2
       return 1 ;; esac
   done
-  echo "  前缀/根 预检：首页含「$FEATURE」与 js/main.js · 5 条真实模块路径按字节对上磁盘（main / ui/game / engine/nurikabe / engine/count / css/game）"
+  echo "  前缀/根 预检：首页含「${FEATURE}」与 js/main.js · 5 条真实模块路径按字节对上磁盘（main / ui/game / engine/nurikabe / engine/count / css/game）"
   return 0
 }
 
