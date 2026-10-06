@@ -164,7 +164,7 @@ bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL �
   B 七条铅笔规则的手推锚点｜C 规则可靠性模糊测试（全枚举对账）｜D1 矛盾检测｜
   D2 状态机：落子 / 循环 / 撤销｜D3 生成器：出货的盘必须零猜测 + 唯一解｜E 随机数与日课种子。
   报告里的每节计数是**累计**口径（19 → 39 → 154 → 165 → 185 → 242 → 425 → 438），
-  由测试文件自己加总，不是手抄（`.github/workflows/ci.yml:45-46` 写的就是这条纪律），总数 438（2026-09-28 重跑）。
+  由测试文件自己加总，不是手抄（`.github/workflows/ci.yml:41-42` 写的就是这条纪律），总数 438（2026-09-28 重跑）。
 - C 那节是这套承诺的地基：4×4 的 `2^16` 种涂法全枚举出合法完整盘（代码要求 3000 块以上，
   `tools/engine-test.mjs:423-432`），用显式种子 `fuzz.v1` 抽 900 盘（`:434`、`:444`），
   每条铅笔结论必须在穷举出的**每一个解**里都成立。五个"必须是 0/必须相等"的计数：
@@ -185,7 +185,7 @@ bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL �
 - 一次 `bash tools/verify.sh` 就覆盖两种形态：`verify.sh` 自己在第二个端口上起一个带前缀的服务
   （两种形态与端口列在 `:5-6`）。第二遍不是凑对称——「origin 不同 → localStorage 各一套，
   前缀那一跑才是「换了文档目录」，不是「重装一遍」」是它自己写着的（`:97`，CI 侧同一条理由在
-  `.github/workflows/ci.yml:91-93`）；而且页内的动态 import 特意按 `document.baseURI` 解析
+  `.github/workflows/ci.yml:96-98`）；而且页内的动态 import 特意按 `document.baseURI` 解析
   （`tools/scenarios.js:205-208`），只有前缀这一跑能看见它有没有解错（`tools/verify.sh:15-20`）。
 - `verify.sh` 里有一步"node 重算种子指纹"（`:139-194`）：九行手抄的期望指纹
   （`tools/scenarios.js:20-66`）在 node 里重算一遍，再和浏览器里读到的同一张盘对拍——

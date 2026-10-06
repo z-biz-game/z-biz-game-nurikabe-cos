@@ -9,7 +9,7 @@
     "dev": "node server.cjs 5311",
     "electron": "electron .",
     "bake": "node tools/bake.mjs",
-    "check": "for f in $(find js -name '*.js'); do node --check \"$f\" || exit 1; done && node --check server.cjs && node --check electron/main.cjs && node --check electron/preload.cjs && for f in $(find tools -name '*.mjs' -o -name '*.js'); do node --check \"$f\" || exit 1; done && node --check \"tools/playtest.cjs\" && echo OK",
+    "check": "for f in $(find js -name '*.js'); do node --check \"$f\" || exit 1; done && node --check server.cjs && node --check electron/main.cjs && node --check electron/preload.cjs && for f in $(find tools -name '*.mjs' -o -name '*.js' -o -name '*.cjs'); do node --check \"$f\" || exit 1; done && node --check \"tools/playtest.cjs\" && echo OK",
     "test": "node tools/engine-test.mjs",
     "balance": "node tools/balance.mjs",
     "verify": "bash tools/verify.sh",

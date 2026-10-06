@@ -35,10 +35,6 @@ jobs:
       - name: Syntax check every source
         run: npm run check
 
-      - name: Syntax check the harness
-        run: |
-          for f in $(git ls-files 'tools/*.mjs' 'tools/*.cjs'); do node --check "$f" || exit 1; done
-
       # The engine's own promises: contradiction detection, the tap/stroke/undo state
       # machine, "a shipped board is pencil-solvable AND unique per the second,
       # deliberately distrustful enumerator", and rng/daily-seed determinism.

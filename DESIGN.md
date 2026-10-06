@@ -359,7 +359,7 @@ FNV-1a 把字符串压成 32 位（`hashSeed`，`:9-18`），mulberry32 出数�
 所以 `balance.mjs` 的 stdout 才能逐字节复跑（`:21`：
 `diff <(node tools/balance.mjs) <(node tools/balance.mjs)` 为空），
 也所以 CI 里那句红起来的 balance 才读作"引擎在 band 底下挪动了"，而不是"骰子没掷好"
-（`.github/workflows/ci.yml:50-55`）。
+（`.github/workflows/ci.yml:46-51`）。
 
 ## 12. 复现这些数字
 
