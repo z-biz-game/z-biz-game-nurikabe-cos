@@ -263,16 +263,37 @@ const resolve = (p) => {
   for (const d of ['tools/', 'js/engine/', 'js/', 'js/ui/', 'css/', '']) if (existsSync(join(ROOT, d + base))) return d + base;
   return null;
 };
+// 一条引用的两道查抽成一个函数，是因为下面那把空行刀要走**同一条代码路径**：把空行那一道删掉，范围检查
+// 照样全绿，只有这一把会立刻红——否则新加的那道查就是一张没有对照的等式。
+const citeMiss = (file, fromRaw, toRaw) => {
+  const rp = resolve(file);
+  const label = `${file}:${fromRaw}${toRaw ? '-' + toRaw : ''}`;
+  if (!rp) return `${label}（文件不存在）`;
+  const src = read(rp).split('\n');
+  const from = +fromRaw;
+  const to = +(toRaw || fromRaw);
+  if (from > src.length || to > src.length) return `${label}（该文件只有 ${src.length} 行）`;
+  // 「在界内」不等于「指到了代码」：句子里没贴名字的裸引用不核锚点（D18 那段写明），只过这一道范围检查，
+  // 所以整段空白必须在这里红——否则它指着的只是一片行距，两道查都会放它过。
+  if (src.slice(from - 1, to).join('').trim() === '') return `${label} 那几行整段是空行`;
+  return '';
+};
 const bad = [];
 for (const c of cites) {
-  const rp = resolve(c[1]);
-  if (!rp) { bad.push(`${c[1]}:${c[2]}（文件不存在）`); continue; }
-  const n = read(rp).split('\n').length;
-  if (+c[2] > n || (+c[3] && +c[3] > n)) bad.push(`${c[1]}:${c[2]}${c[3] ? '-' + c[3] : ''}（该文件只有 ${n} 行）`);
+  const miss = citeMiss(c[1], c[2], c[3]);
+  if (miss) bad.push(miss);
 }
+// 反空转的刀：目标行号现量（本闸自己这份文件的第一处空行），不写死——写死的那个数会在有人填了那一行之后
+// 悄悄地不再测任何东西，`blankAt > 0` 把那一天变成红。
+const probeBlank = read('tools/doctest.mjs').split('\n');
+let blankAt = 0;
+for (let i = 1; i < probeBlank.length; i++) if (String(probeBlank[i]).trim() === '') { blankAt = i + 1; break; }
+const blankKnife = blankAt ? citeMiss('tools/doctest.mjs', blankAt, null) : '';
 ok(cites.length >= 40, `D11a 文档里的 path:NN 引用解析到 ${cites.length} 条（少于 40 条说明引用格式改了）`, `${cites.length} 条`);
-ok(bad.length === 0, `D11 每一条 path:NN 引用都落在真实文件的行数内（改了代码不重编就是这里红）`,
-  bad.length ? `越界：${bad.slice(0, 5).join('，')}${bad.length > 5 ? ` …共 ${bad.length} 条` : ''}` : `${cites.length} 条全部在范围内`);
+ok(bad.length === 0 && !!blankKnife, `D11 每一条 path:NN 引用都落在真实文件的行数内、且被指的那几行整段不许是空行（改了代码不重编就是这里红；这一格自己带一把指向空行的刀）`,
+  bad.length ? `越界/不存在/空行：${bad.slice(0, 5).join('，')}${bad.length > 5 ? ` …共 ${bad.length} 条` : ''}`
+    : blankKnife ? `${cites.length} 条全部在范围内 · 刀：第 ${blankAt} 行是空行，指过去判红「${blankKnife.split(' ').pop()}」`
+      : '本闸自己的文件里找不出空行靶子 —— 空行那一道没被证明过');
 
 // ---- D18 锚点从文档现推：落在行数内不够，被指的那几行还得真坐着它点名的那个东西 ----
 // D11 只问"这个行号存在吗"。一句「`OVERBUDGET` 在 `count.js:352`」如果其实指的是隔壁那一行，行号照样在
@@ -319,19 +340,44 @@ const deriveAnchors = (text) => {
   }
   return out;
 };
+// 整词，不是子串：`clue` 坐在声明 `clueRuns` 的那一行上不算命中，名字两侧再是字母、数字、`_`、`$`
+// 就不是这个标识符本身。子串口径比它替掉的手写锚点表**更弱**——一个短名字会"出现在"任何碰巧含它的
+// 标识符里，于是把一次真的漂读成绿。缓存是因为一条腿要对同一个名字核上百次。
+const wordCache = new Map();
+const hasWord = (text, name) => {
+  if (!wordCache.has(name)) {
+    wordCache.set(name, new RegExp('(^|[^A-Za-z0-9_$])' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^A-Za-z0-9_$])'));
+  }
+  return wordCache.get(name).test(text);
+};
 const anchorMiss = (list) => list.filter(d => {
   const rp = resolve(d.file);
   if (!rp) return true;
   const src = read(rp).split('\n');
   if (d.from < 1 || d.to > src.length) return true;
-  return !src.slice(d.from - 1, d.to).join('\n').includes(d.anchor);
+  return !hasWord(src.slice(d.from - 1, d.to).join('\n'), d.anchor);
 });
 const citeKey = (d) => `${d.file}:${d.from}${d.to !== d.from ? '-' + d.to : ''}`;
 const docAnchors = deriveAnchors(DOCS);
 const anchorBad = anchorMiss(docAnchors);
-ok(anchorBad.length === 0, 'D18a 从文档现推的每一个锚点都坐在被指的那几行里（行号在范围内不算数）',
+// 这一格自带一把刀，走的就是上面那条代码路径：把某条现推锚点的名字截掉最后一格，截出来的串仍然是被指
+// 那几行的子串、却不再是一个完整标识符（`fooBar` 那行永远"含" `fooBa`）。整词口径必须为它红；口径哪天
+// 退回子串，那一天正是所有候选都"过"、这把刀挑不出红的那一天，所以挑不出就当场红，不许静默跳过。
+const wordKnife = (() => {
+  for (const d of docAnchors) {
+    const rp = resolve(d.file);
+    if (!rp) continue;
+    const body = read(rp).split('\n').slice(d.from - 1, d.to).join('\n');
+    const cut = d.anchor.slice(0, -1);
+    if (cut.length < 3 || !body.includes(d.anchor) || !body.includes(cut)) continue;
+    if (anchorMiss([{ ...d, anchor: cut }]).length) return { d, cut };
+  }
+  return null;
+})();
+ok(anchorBad.length === 0 && !!wordKnife, 'D18a 从文档现推的每一个锚点都作为**完整标识符**坐在被指的那几行里（整词口径；行号在范围内不算数，这一格自己带一把截前缀的刀）',
   anchorBad.length ? `漂 ${anchorBad.length} 处：${anchorBad.slice(0, 6).map(d => `${citeKey(d)} 里找不到 ${d.anchor}`).join('，')}`
-    : `现推 ${docAnchors.length} 条，全部落回原处`);
+    : wordKnife ? `现推 ${docAnchors.length} 条，全部落回原处 · 刀：${citeKey(wordKnife.d)} 的 ${wordKnife.d.anchor} 截成 ${wordKnife.cut} 判红`
+      : '现推锚点里截不出前缀靶子 —— 这一格没被证明过');
 ok(docAnchors.length >= 15, `D18b 现推锚点解析到 ${docAnchors.length} 条（少于 15 条就是引用格式被改了或解析断了，那不是"更绿"）`,
   `${docAnchors.length} 条，头四条：${docAnchors.slice(0, 4).map(d => `${citeKey(d)}=${d.anchor}`).join(' ')}`);
 // 刀（下在内存里，盘上一个字节不动）：把某条引用的行号整段往后挪两行，检查器必须认这笔漂。
