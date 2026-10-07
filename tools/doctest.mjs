@@ -274,6 +274,81 @@ ok(cites.length >= 40, `D11a 文档里的 path:NN 引用解析到 ${cites.length
 ok(bad.length === 0, `D11 每一条 path:NN 引用都落在真实文件的行数内（改了代码不重编就是这里红）`,
   bad.length ? `越界：${bad.slice(0, 5).join('，')}${bad.length > 5 ? ` …共 ${bad.length} 条` : ''}` : `${cites.length} 条全部在范围内`);
 
+// ---- D18 锚点从文档现推：落在行数内不够，被指的那几行还得真坐着它点名的那个东西 ----
+// D11 只问"这个行号存在吗"。一句「`OVERBUDGET` 在 `count.js:352`」如果其实指的是隔壁那一行，行号照样在
+// 范围内，D11 一路绿——本仓上一轮就是这样绿的（DESIGN 那句把 OVERBUDGET 与 UNIQUE 混引到 352）。
+// 这一段拿同一份文档当输入现推锚点：贴着 `path:NN` 写出来的那个反引号标识符，必须真的出现在被指的那几行里。
+// 口径写死：一条锚点 = (文件, 行段, 名字)，同一处在两份文档各写一次只算一条；句子里没有贴着名字的裸
+// `path:NN` 这里一条都不核，那部分仍只过 D11 —— 这条腿没覆盖什么，README 里也照样写明，不装作全覆盖。
+const ANCH_CITE = /^([\w./-]+\.(?:js|mjs|cjs|sh|json|html|yml)):(\d+)(?:-(\d+))?$/;
+const ANCH_ID = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
+const anchorTok = (body) => {
+  const seg = body.includes('::') ? body.slice(body.lastIndexOf('::') + 2) : body;
+  if (seg.includes('/')) return '';
+  const head = seg.split('(')[0].trim();
+  if (ANCH_ID.test(head)) return head;
+  const lhs = head.split(/[=:]\s/)[0].trim();
+  return ANCH_ID.test(lhs) ? lhs : '';
+};
+const deriveAnchors = (text) => {
+  const spans = [...text.matchAll(/`([^`\n]+)`/g)].map(m => ({ body: m[1], s: m.index, end: m.index + m[0].length }));
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < spans.length; i++) {
+    const c = spans[i].body.match(ANCH_CITE);
+    if (!c) continue;
+    let anchor = '';
+    const next = spans[i + 1];
+    if (next) {
+      const gap = text.slice(spans[i].end, next.s);
+      if (gap.length <= 4 && !gap.includes('\n') && (/^[（(]/.test(gap.replace(/\s+/g, '')) || gap.replace(/\s+/g, '') === '的')) anchor = anchorTok(next.body);
+    }
+    if (!anchor && i > 0) {
+      const prev = spans[i - 1];
+      const gap = text.slice(prev.end, spans[i].s);
+      const g = gap.replace(/\s+/g, '');
+      if (gap.length <= 4 && !gap.includes('\n') && !/\s/.test(prev.body) && (/^[（(]/.test(g) || /[\w一-鿿]/.test(g))) anchor = anchorTok(prev.body);
+    }
+    if (!anchor) continue;
+    const from = +c[2];
+    const to = +(c[3] || c[2]);
+    const key = `${c[1]}:${from}-${to}:${anchor}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ file: c[1], from, to, anchor, label: `${c[1]}:${from}${c[3] ? '-' + c[3] : ''}` });
+  }
+  return out;
+};
+const anchorMiss = (list) => list.filter(d => {
+  const rp = resolve(d.file);
+  if (!rp) return true;
+  const src = read(rp).split('\n');
+  if (d.from < 1 || d.to > src.length) return true;
+  return !src.slice(d.from - 1, d.to).join('\n').includes(d.anchor);
+});
+const citeKey = (d) => `${d.file}:${d.from}${d.to !== d.from ? '-' + d.to : ''}`;
+const docAnchors = deriveAnchors(DOCS);
+const anchorBad = anchorMiss(docAnchors);
+ok(anchorBad.length === 0, 'D18a 从文档现推的每一个锚点都坐在被指的那几行里（行号在范围内不算数）',
+  anchorBad.length ? `漂 ${anchorBad.length} 处：${anchorBad.slice(0, 6).map(d => `${citeKey(d)} 里找不到 ${d.anchor}`).join('，')}`
+    : `现推 ${docAnchors.length} 条，全部落回原处`);
+ok(docAnchors.length >= 15, `D18b 现推锚点解析到 ${docAnchors.length} 条（少于 15 条就是引用格式被改了或解析断了，那不是"更绿"）`,
+  `${docAnchors.length} 条，头四条：${docAnchors.slice(0, 4).map(d => `${citeKey(d)}=${d.anchor}`).join(' ')}`);
+// 刀（下在内存里，盘上一个字节不动）：把某条引用的行号整段往后挪两行，检查器必须认这笔漂。
+// 先找一把"挪得动"的锚点——挪完那两行里不再有它点名的东西；一把都找不到就判红，不许静默跳过。
+const knifeTarget = docAnchors.find(d => anchorMiss([{ ...d, from: d.from + 2, to: d.to + 2 }]).length === 1);
+const kDoc = knifeTarget ? DOCS.replace(citeKey(knifeTarget), `${knifeTarget.file}:${knifeTarget.from + 2}${knifeTarget.to !== knifeTarget.from ? '-' + (knifeTarget.to + 2) : ''}`) : DOCS;
+const kMiss = kDoc === DOCS ? [] : anchorMiss(deriveAnchors(kDoc));
+ok(!!knifeTarget && kMiss.length >= 1, 'D18c 刀：把一句引用的行号挪两行，这一格必须认它漂（而不是"少推出一条所以更绿"）',
+  !knifeTarget ? '文档里找不出一把挪得动的锚点 —— 这条腿没被证明过'
+    : `下刀处 ${citeKey(knifeTarget)} 的 ${knifeTarget.anchor} → 现推漂 ${kMiss.length} 处：${kMiss.slice(0, 2).map(d => citeKey(d)).join('，')}`);
+{
+  const quoted = [...DOCS.matchAll(/现推锚点 (\d+) 条/g)].map(m => +m[1]);
+  ok(quoted.length >= 1 && quoted.every(v => v === docAnchors.length),
+    'D18d 文档抄的「现推锚点 N 条」等于这一次真的从文档推出来的条数（删掉这个数字同样算红）',
+    `闸数到 ${docAnchors.length} · 文档写了 ${quoted.length} 处：${[...new Set(quoted)].join('/') || '一处都没写'}`);
+}
+
 // ---- D12 承诺表：README 那四行「四条承诺」的闸名都指得到真东西 ----
 const promiseSection = README.slice(README.indexOf('## 这四条承诺'), README.indexOf('## 这个仓'));
 const promiseRows = promiseSection.split('\n')
@@ -346,8 +421,8 @@ ok(rcCells.every(x => x && /^\d+$/.test(x)), `D16c 台账每一格 rc 都是从�
   rcCells.join(' / '));
 
 // ---- D17 自数：这道闸自己发出的 D 组数与项数都钉死 —— 删一条 test/少解析一行就是这里红 ----
-const EXPECT_GROUPS = 17;
-const EXPECT_ROWS = 157;
+const EXPECT_GROUPS = 18;
+const EXPECT_ROWS = 161;
 // 注意求值顺序：ok() 的 label/detail 实参在本条计入 emitted/rows 之前就已算好，
 // 所以这里显式把「本闸接下来要发的 D17a、D17b 两条」和「D17 这一组」预先并进总数再比。
 const finalRows = rows + 2;
