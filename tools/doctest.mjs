@@ -256,7 +256,7 @@ for (const [file, what, srcRe] of ANCHORS) {
 }
 
 // ---- D11 泛引用范围检查：README + DESIGN 里每一条 path:NN / path:NN-MM 都落在真实文件行数内 ----
-const cites = [...DOCS.matchAll(/((?:\.github\/workflows\/|js\/|tools\/|css\/)?[\w./-]+\.(?:js|mjs|cjs|sh|json|html|yml)):(\d+)(?:-(\d+))?/g)];
+const cites = [...DOCS.matchAll(/((?:\.github\/workflows\/|js\/|tools\/|css\/)?[\w./-]+\.[A-Za-z][A-Za-z0-9]{0,11}):(\d+)(?:-(\d+))?/g)]; // 后缀不许写死：名单里没有的那个后缀，这条腿就永远读不到它，而「都核过了」照样打印
 const resolve = (p) => {
   if (existsSync(join(ROOT, p))) return p;
   const base = p.split('/').pop();
@@ -301,7 +301,7 @@ ok(bad.length === 0 && !!blankKnife, `D11 每一条 path:NN 引用都落在真�
 // 这一段拿同一份文档当输入现推锚点：贴着 `path:NN` 写出来的那个反引号标识符，必须真的出现在被指的那几行里。
 // 口径写死：一条锚点 = (文件, 行段, 名字)，同一处在两份文档各写一次只算一条；句子里没有贴着名字的裸
 // `path:NN` 这里一条都不核，那部分仍只过 D11 —— 这条腿没覆盖什么，README 里也照样写明，不装作全覆盖。
-const ANCH_CITE = /^([\w./-]+\.(?:js|mjs|cjs|sh|json|html|yml)):(\d+)(?:-(\d+))?$/;
+const ANCH_CITE = /^([\w./-]+\.[A-Za-z][A-Za-z0-9]{0,11}):(\d+)(?:-(\d+))?$/; // 后缀不许写死：名单里没有的那个后缀，这条腿就永远读不到它，而「都核过了」照样打印
 const ANCH_ID = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
 const anchorTok = (body) => {
   const seg = body.includes('::') ? body.slice(body.lastIndexOf('::') + 2) : body;
@@ -403,7 +403,7 @@ const promiseRows = promiseSection.split('\n')
 ok(promiseRows.length === 4, `D12a 承诺表解析到 ${promiseRows.length} 行（!=4 就是表格形状被改了或整节被删）`,
   `${promiseRows.length} 行`);
 for (const r of promiseRows) {
-  const targets = [...r.body.matchAll(/`((?:js|tools)\/[\w./-]+\.(?:js|mjs|cjs|sh))(?::\d+(?:-\d+)?)?`/g)].map(x => x[1]);
+  const targets = [...r.body.matchAll(/`((?:js|tools)\/[\w./-]+\.[A-Za-z][A-Za-z0-9]{0,11})(?::\d+(?:-\d+)?)?`/g)].map(x => x[1]); // 后缀不许写死：名单里没有的那个后缀，这条腿就永远读不到它，而「都核过了」照样打印
   const real = targets.filter(p => existsSync(join(ROOT, p)));
   ok(targets.length >= 1 && real.length === targets.length, `D12 ${r.name.slice(0, 12)}… 那一行的每一处 path 都在树里`,
     `点名 ${targets.length} · 在树 ${real.length}${real.length !== targets.length ? ` · 缺：${targets.filter(t => !real.includes(t)).join(',')}` : ''}`);
