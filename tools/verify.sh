@@ -97,7 +97,7 @@ if [ "$CUSTOM" = 0 ]; then
   echo "  两种形态各用一个端口：origin 不同 → localStorage 各一套，前缀那一跑才是"换了文档目录"，不是"重装一遍""
 else
   CDP=${CDP_PORT:-9361}
-  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP $CDP）"
+  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP ${CDP}）"
 fi
 echo "logs: $LOGDIR"
 
@@ -240,7 +240,7 @@ preflight() {
   local served
   served=$(curl -fsS -m 8 "$base" 2>/dev/null) || { echo "  首页取不到：$base" >&2; return 1; }
   case "$served" in *js/main.js*) ;; *) echo "  $base 上发的不是本仓的首页（正文里找不到 js/main.js）" >&2; return 1 ;; esac
-  case "$served" in *"$FEATURE"*) ;; *) echo "  $base 在发别的应用：首页正文里找不到「$FEATURE」" >&2; return 1 ;; esac
+  case "$served" in *"$FEATURE"*) ;; *) echo "  $base 在发别的应用：首页正文里找不到「${FEATURE}」" >&2; return 1 ;; esac
   for rel in js/main.js js/ui/game.js js/engine/nurikabe.js js/engine/count.js css/game.css; do
     want=$(wc -c < "$HERE/$rel" | tr -d ' ')
     [ -n "$want" ] || { echo "  $rel 在磁盘上读不到，闸没有可对的基准" >&2; return 1; }
@@ -248,11 +248,11 @@ preflight() {
     got=$(curl -sS -m 8 -o "$f" -w '%{http_code} %{size_download}' "$base$rel" 2>/dev/null) || {
       echo "  $rel 取不回来：$base$rel" >&2; return 1; }
     case "$got" in "200 $want") ;; *)
-      echo "  $rel 不对味：$base$rel 回 $got，磁盘上的这份是 200 $want 字节" >&2
+      echo "  $rel 不对味：$base$rel 回 ${got}，磁盘上的这份是 200 $want 字节" >&2
       echo "  前两行到手内容：$(head -c 160 "$f" | tr '\n' ' ')" >&2
       return 1 ;; esac
   done
-  echo "  前缀/根 预检：首页含「$FEATURE」与 js/main.js · 5 条真实模块路径按字节对上磁盘（main / ui/game / engine/nurikabe / engine/count / css/game）"
+  echo "  前缀/根 预检：首页含「${FEATURE}」与 js/main.js · 5 条真实模块路径按字节对上磁盘（main / ui/game / engine/nurikabe / engine/count / css/game）"
   return 0
 }
 
@@ -341,6 +341,14 @@ run_shape() {
   return $bad
 }
 
+# ---- 逻辑闸（先跑、不开浏览器）：文档数字必须等于代码/现跑读数；台账刀必须逼红再复原 ----
+# doctest / sabotage 与 CI 的 check job 跑的是同两条命令，本地绿 == CI 绿；任何一条红都在这里把
+# 整个 verify 拉红（FAILED 汇总到结尾的 exit $FAILED）。放在浏览器循环之前，逻辑坏了不用等 Chrome。
+echo "=== 逻辑闸 tools/doctest.mjs（文档 == 代码 / balance / engine-test 现跑）==="
+node tools/doctest.mjs || { echo "  doctest 红：文档里有数字不等于代码或闸的现跑值" >&2; FAILED=1; }
+echo "=== 逻辑闸 tools/sabotage.mjs（破坏试验台账：每一类谎都要把对应断言逼红）==="
+node tools/sabotage.mjs || { echo "  sabotage 红：某一类破坏没能把对应断言逼到失败" >&2; FAILED=1; }
+
 SHAPE_LIST="root prefix"
 [ "$CUSTOM" = 1 ] && SHAPE_LIST=custom
 for shape in ${SHAPES:-$SHAPE_LIST}; do
@@ -355,5 +363,10 @@ for shape in ${SHAPES:-$SHAPE_LIST}; do
 done
 
 kill $WD 2>/dev/null
+# 部署集闸：ci.yml 跑这两步、本地整闸以前一次都不跑。缺这一步就是「本地全绿、线上 404 自己的
+# manifest / sw.js / 图标」这一整类坏法。它不碰 Chrome，也不读页面，纯查产物。
+echo "=== deploy-set ==="
+node tools/deploy-set.mjs || FAILED=1
+node tools/deploy-set-selftest.mjs || FAILED=1
 [ $FAILED -eq 0 ] && echo "=== ALL GREEN（两种 URL 形态的全部场景）===" || echo "=== FAILURES ABOVE ==="
 exit $FAILED

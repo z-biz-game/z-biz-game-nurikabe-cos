@@ -149,12 +149,14 @@
 引擎里还有一步 `consolidate`（`js/engine/nurikabe.js:215-248`）：那是岛归属的**记账**，
 不算规则、不进权重，所以它不会出现在提示文案里。
 
-## 跑测试：四条命令各自证明什么
+## 跑测试：六条命令各自证明什么
 
 ```bash
 npm run check              # 逐文件 node --check：全部 js + server.cjs + electron + tools。OK
 node tools/engine-test.mjs # 引擎断言 438/438 通过，8 节（A1 A2 B C D1 D2 D3 E），打累计计数
 SAMPLES=24 node tools/balance.mjs # 难度尺：五档全出货 / 入带率 100% / p50 严格递增，否则 exit 1
+node tools/doctest.mjs     # 文档数字闸：README/DESIGN 每个现值 == 代码或 balance/engine-test 现跑
+node tools/sabotage.mjs    # 破坏试验台账：把每类谎塞回代码，逼对应断言变红，再逐字节复原
 bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL 形态，各 755 条断言 0 失败
 ```
 
@@ -162,7 +164,7 @@ bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL �
   B 七条铅笔规则的手推锚点｜C 规则可靠性模糊测试（全枚举对账）｜D1 矛盾检测｜
   D2 状态机：落子 / 循环 / 撤销｜D3 生成器：出货的盘必须零猜测 + 唯一解｜E 随机数与日课种子。
   报告里的每节计数是**累计**口径（19 → 39 → 154 → 165 → 185 → 242 → 425 → 438），
-  由测试文件自己加总，不是手抄（`.github/workflows/ci.yml:45-46` 写的就是这条纪律），总数 438（2026-09-28 重跑）。
+  由测试文件自己加总，不是手抄（`.github/workflows/ci.yml:41-42` 写的就是这条纪律），总数 438（2026-09-28 重跑）。
 - C 那节是这套承诺的地基：4×4 的 `2^16` 种涂法全枚举出合法完整盘（代码要求 3000 块以上，
   `tools/engine-test.mjs:423-432`），用显式种子 `fuzz.v1` 抽 900 盘（`:434`、`:444`），
   每条铅笔结论必须在穷举出的**每一个解**里都成立。五个"必须是 0/必须相等"的计数：
@@ -183,15 +185,61 @@ bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL �
 - 一次 `bash tools/verify.sh` 就覆盖两种形态：`verify.sh` 自己在第二个端口上起一个带前缀的服务
   （两种形态与端口列在 `:5-6`）。第二遍不是凑对称——「origin 不同 → localStorage 各一套，
   前缀那一跑才是「换了文档目录」，不是「重装一遍」」是它自己写着的（`:97`，CI 侧同一条理由在
-  `.github/workflows/ci.yml:78-80`）；而且页内的动态 import 特意按 `document.baseURI` 解析
+  `.github/workflows/ci.yml:96-98`）；而且页内的动态 import 特意按 `document.baseURI` 解析
   （`tools/scenarios.js:205-208`），只有前缀这一跑能看见它有没有解错（`tools/verify.sh:15-20`）。
 - `verify.sh` 里有一步"node 重算种子指纹"（`:139-194`）：九行手抄的期望指纹
   （`tools/scenarios.js:20-66`）在 node 里重算一遍，再和浏览器里读到的同一张盘对拍——
   同一颗 seed 必须在 node 和 Chrome 里画出同一张盘。
 - CI（`.github/workflows/ci.yml`）两个 job：`check` = `npm run check` + 测试脚本自身语法 +
-  `engine-test` + `SAMPLES=24 balance` + 入口文件 grep；`browser` = Node 22 上 `bash tools/verify.sh`。
+  `engine-test` + `SAMPLES=24 balance` + 入口文件 grep + `doctest` + `sabotage`；`browser` = Node 22 上 `bash tools/verify.sh`。
   **全程没有 `npm install`**：零运行时依赖、零构建步骤，装依赖只会换来网络抖动。
   `node-version: 22` 是被 `tools/playtest.cjs` 钉的——它用 22+ 才有的全局 `WebSocket`/`fetch`。
+  `doctest` 与 `sabotage` 是纯 node 逻辑闸（不起浏览器、不开端口），CI 的 `check` job 和本地
+  `bash tools/verify.sh` 跑的是同两条命令——本地绿 == CI 绿，没有"只在某一边才跑"的那道。
+- `file:NN` 引用在 `doctest` 里有两条腿。D11 问"这个行号落在真实文件的行数内吗，且被指的那几行整段不是空白吗"；
+  D18 问"被指的那几行里，真坐着这句话点名的那个**完整标识符**吗"。后者拿同一份文档当输入现推锚点：贴着 `path:NN`
+  写出来的那个反引号标识符就是锚点，一条锚点是 (文件, 行段, 名字) 这个三元组，同一处在两份文档里各写一次只算一条。
+  本轮现推锚点 17 条，逐条落回原处；这一格上线当轮改掉的是 `DESIGN.md` §3 里那句把 `OVERBUDGET` 与 `UNIQUE`
+  混引到同一行的话（两个状态在 `js/engine/count.js` 里本来就差两行）。
+  锚点认的是**整词**不是子串：名字两侧再是字母、数字、`_`、`$` 就不是这个标识符本身。子串口径比它替掉的手写锚点表
+  **更弱**——一个短名字会"出现在"任何碰巧含它的标识符里，于是把一次真的漂读成绿。这一格自己带一把截前缀的刀
+  （现挑一条真引用的锚点、把最后一格削掉，要求削出来的串仍是被指那几行的子串却不是完整标识符，整词必须判它红），
+  口径哪天退回子串，那一天正是所有候选都"过"、这把刀挑不出红、D18a 当场红的日子，不会静默跳过。
+  D11 那一道同步加严：**被指的那几行整段是空白就红**。"在界内"从来不等于"指到了代码"，一条裸引用落在 1 与文件行数
+  之间可能只是指到了一段行距；带名字的那条腿本来就会把空行判红（空行里坐不住任何标识符），所以这一道补的正是
+  裸引用那一格。它同样自带对照：目标行号现量（本闸自己那份文件的第一处空行），写死的那个数会在有人填了那一行之后
+  悄悄地不再测任何东西。
+  两把新刀各有牙，且都跑在盘上同名副本里（真仓一个字节没动）：把整词那行改回子串、把空行那一道删掉，`doctest`
+  两次都**只红一条**、红的就是点名它的那一条，复原回绿；第三腿把一句真引用的锚点名截成前缀，D18a 为它红并说出
+  「里找不到」。判词 `TEETH_OK` 与三条读数在 `_tmp-nurikabe-word-teeth.log`，整跑闸的 161 项读数在
+  `_tmp-nurikabe-word.log`（副本基线 `rows: 161 fail: 0`，所以红不是"本来就红"）。本轮两份文档里没有一条引用整段
+  落在空行上、也没有一条锚点因整词口径变红，这两道都是加严，不是修一处已经存在的漂。口径不同的一处也写明：
+  代码侧那几条字面串探针（比如解析五档表时对 `export const TIERS` 的包含判断）仍是子串——它们比的是**形状**而不是
+  标识符，改成整词会把合法声明读成不存在。
+  **这条腿没覆盖什么也写在这**：文档里还有大量句子里没有贴着标识符的裸 `path:NN`，现推腿对它们一条都拿不到，
+  那些只过 D11 的范围 + 空行两道查；指向同一文件里另一处**非空**的行，这一格看不见，只有句子里贴了名字的才核得到
+  （贴上去一个标识符，D18b 数到的条数就跟着涨，文档这两句得同步改，只改一边就红）。
+  D18c 那把刀下在内存里（把某句引用的行号整段挪两行，盘上一个字节不动），
+  它证明的是"挪错了会红"，不是"每一句都被核过"。
+
+## 破坏试验台账（4 把刀）
+
+`tools/doctest.mjs` 绿了，"绿"也有两种：被断言真的守住了，和解析器集体扑空（正则改了形状、锚点被
+删空、balance 压根没跑起来）。前者是成绩，后者是假账。唯一的分辨办法是把"文档抄了一个已经不存在的
+数"这类谎一类一类塞回**代码**里，看这道闸是不是立刻变红、并且红的就是文档点名的那一条。
+`tools/sabotage.mjs` 就固化了这四把刀：每把改一个真实代码文件、当场跑 doctest 读回真实 rc、再用内存
+里读回的原始字节 `writeFileSync` 复原（绝不借 git 命令复原），复原后逐字节回读校验；最后不带破坏地对照
+跑一遍 doctest + engine-test，证明台账不是靠把闸改坏来让自己变绿的。
+
+| 刀 | 打哪一组 | 它把什么改坏 | 必须逼红的那条断言 | 真实 rc |
+|---|---|---|---|---|
+| K1 | D1 | `generate.js` 初学档 band 上限 43→42 | 「D1 初学 的 band 34–43 == TIERS 现值」 | 1 |
+| K2 | D2 | `nurikabe.js` 第 7 条规则 bridge 权重 3→2 | 「D2 bridge 的层级/权重 5/3 == Rules 现值」 | 1 |
+| K3 | D7 | `verify.sh` 的 HTTP 默认端口 5311→5312 | 「D7 HTTP 默认号两处一致」 | 1 |
+| K4 | D8 | `index.html` 第一个读数单元 class 改掉（侧栏只剩七个 stat） | 「D8a index.html 解析到 N 个 stat 单元」 | 1 |
+
+每一格的 rc 都是 `node tools/sabotage.mjs` 从子进程读回来的真实读数（不是抄的），自钉回脚本里；干净树
+上重跑只会得到同样的 1，是幂等的。任何一把刀塞了谎 doctest 却仍 rc=0，或红在了别处，台账自己就判红。
 
 ## 技术形态
 
@@ -228,11 +276,60 @@ js/store.js             localStorage 单键存档：RLE 墨 + 原点 seed + 逐�
 js/theme.js             颜色/间距/时长，CSS 变量的唯一来源
 js/audio/synth.js       WebAudio 现场合成的落子音
 js/main.js              装配与读数同步：一条规则都不写在这里
-tools/                  engine-test / balance / playtest(CDP) / scenarios / verify.sh
+tools/                  engine-test / balance / playtest(CDP) / scenarios / verify.sh / assemble-site.sh / deploy-set.mjs / deploy-set-selftest.mjs
 server.cjs              零依赖静态服务（5311）
 electron/               桌面壳（同一份代码，无构建）
+tools/assemble-site.sh  部署产物的唯一清单（pages.yml 与本地闸调同一支）
+tools/deploy-set.mjs  部署集闸：检查即将上传的那份产物
+tools/deploy-set-selftest.mjs  部署集闸的阴性自证（每一类断言当场打红一次）
 ```
 
 ## 许可
 
 MIT。见 `LICENSE`。
+
+## 上线的到底是哪一批文件
+
+这个仓没有打包器：站点=一次文件拷贝。以前「拷哪些」写在 `pages.yml` 的 `run:` 里（手抄的几行
+`cp`）。本地 `index.html` 直读仓库根，永远自洽；线上却按那份清单拷，于是页面后来引用的
+`manifest.webmanifest`、`sw.js`、`icons/*` 可能一个都没上去——线上 404，而仓里的引擎测试与
+真浏览器闸全绿，因为它们跑的都是仓库根，没有任何一步在「按清单拷」的那个环境下加载过页面。
+
+现在清单只有一份，住在 `tools/assemble-site.sh`：CI 调它拷 `_site`，本地闸调它拷临时目录，
+然后**对拷出来的产物**提要求（`tools/deploy-set.mjs`）：
+
+- **W 清单与页面同源**：`pages.yml` 里必须真有 `run: bash tools/assemble-site.sh <dir>` 这一行，
+  `ci.yml` 里必须真有 `run: node tools/deploy-set.mjs`。认的是调用那一行，不是文件里出现过这个
+  路径——注释里本来就会写它，只 grep 字符串会被一句散文喂绿。
+- **R 引用可达**：引用不靠手打名单。从 `index.html` 的 `href/src` 出发，凡解析出来是 `.js`/`.css`
+  的就把那一站也扫一遍（CSS 的 `url()`、JS 去掉注释后的 `'./…'` 字面量、`new URL(x, base)` 的两种
+  基、`navigator.serviceWorker.register`、`scope`），`manifest` 的 icons/screenshots/shortcuts 各自
+  的 `src` 也算引用。取径上读不到的那一站本身就是红（读不到＝这一站根本没扫）。每条引用都必须在
+  产物里且非 0 字节；绝对路径单列一条红，因为 Pages 挂在 `/<repo>/` 前缀下会跳出去。
+- **P 位图不许说谎**：`manifest` 声明的 `sizes` 必须等于 PNG IHDR 的真实宽高——文件图标读文件头，
+  内联成 base64 的图标先解码再读同一段。后一条不是可选项：图标可能住在清单里而不是盘上的 `.png`
+  （有的仓另有一条"零二进制文件"的承诺，那条只约束"有没有 .png 这个文件"）；如果 P 段只筛文件名，
+  声明写 512 而真图 192 就一路放行。
+- **钉住两个数**：R 段实际检查的路径条数（`26`）与这一次跑的断言条数（`44`），两个数
+  都钉在 `tools/deploy-set.mjs` 顶部的那对常量里。没改页面却掉了，说明解析断了；删掉一张图标会同时
+  少一条 R10 与那张的 P1/P2，所以两个数一起钉，断言条数能漂就是闸在缩水的信号。这一节故意只写数值、
+  不写那对常量的名字，也不写别仓文档闸的编号：有的仓的文档闸会拿"文档里出现过的同名标识号"回数它
+  自己的条数，还有的会把文档里点到的每个组编号逐个核对"这一轮真的发过"——两道闸共用一个名字，
+  或者在本仓的文档里出现一个本仓没有的组编号，打红的都是不相干的那一边。
+
+`tools/deploy-set-selftest.mjs` 是这两颗钉的阳性证明：它把仓库复制到临时目录，照着每一类断言
+各下一刀（X1 清单不收位图目录 / X2 模块边改名 / X3 CSS 写绝对路径 / X4 `start_url` 绝对 /
+X5 删光 >=512 图标 / X6 少一个必填字段 / X7 声明尺寸与真图不符 / X8 workflow 不调脚本 /
+X9 CI 不跑闸 / X10 是阴性对照——往入口 JS 追加一行只写在注释里的假路径，闸必须仍然绿、条数仍然
+`26`、断言仍然 `44`；X11 og:image 退回相对路径 / X12 og:image 的前缀指向别的 slug /
+X13 内联位图谎报尺寸——只在有靶子时下：X11/X12 要页面上那句 og:image，X13 要清单里真有一段 base64
+图标，没有就打印 SKIP；反过来 X1 没有位图目录可砍时改砍 css，P 段一位都不核时台架直接报靶子不够），
+要求每一刀都让闸**点名**变红。靶子从 `DEPLOY_SET_DUMP=1`
+的出处表现挑（取径真的会读的那支 JS / 那一张 CSS，不写死某一个仓的入口名），所以页面改了、仓与仓
+不同，台架跟着走。
+
+`node tools/deploy-set.mjs` 与 `node tools/deploy-set-selftest.mjs` 就是 CI 跑的那两条命令本身
+（package.json 里的 `deploy-set` / `deploy-set:selftest` 只是同一支脚本的 npm 入口）；本仓的整闸在 `tools/verify.sh` 的 `=== deploy-set ===` 那一段也各跑一次。它们红的时候并进本仓那条出口的退出码——这一条是这么证的：
+把 ci.yml 里那行 `run: node tools/deploy-set.mjs` 砍掉，本仓整闸必须点名红且退出码非 0。
+所以「本地全绿、线上 404 自己的 manifest / sw.js / 图标」这一类坏法在本地就会红。
+

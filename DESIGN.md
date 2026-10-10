@@ -115,7 +115,7 @@ and no helper"，几何在 `:33-63` 自己重写了一份），连它的格子�
 出货判定同时要求两条腿：`crossCheck()`（`js/engine/generate.js:309-321`）只在
 `status === UNIQUE`、`level === 'count'`、`mismatch === 0` 三个条件同时成立时放行；
 `level: 'pencil'` 专指"穷举超预算，唯一性只剩铅笔一条腿"（`:305` 的类型与 `:312` 的返回），而 `OVERBUDGET`
-是独立第四种状态、绝不与 `UNIQUE` 混用（`js/engine/count.js:352`）。
+是独立第四种状态、绝不与 `UNIQUE` 混用（`js/engine/count.js:352` 的 `OVERBUDGET`、`:354` 的 `UNIQUE` 各是一支，两个数不在同一行）。
 
 ## 4. 七条规则：可靠的根据，不完备的代价
 
@@ -359,7 +359,7 @@ FNV-1a 把字符串压成 32 位（`hashSeed`，`:9-18`），mulberry32 出数�
 所以 `balance.mjs` 的 stdout 才能逐字节复跑（`:21`：
 `diff <(node tools/balance.mjs) <(node tools/balance.mjs)` 为空），
 也所以 CI 里那句红起来的 balance 才读作"引擎在 band 底下挪动了"，而不是"骰子没掷好"
-（`.github/workflows/ci.yml:50-55`）。
+（`.github/workflows/ci.yml:46-51`）。
 
 ## 12. 复现这些数字
 
