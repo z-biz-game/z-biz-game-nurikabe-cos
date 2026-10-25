@@ -119,8 +119,8 @@ main { flex: 1; }
   to { opacity: 1; transform: none; }
 }
 
-.reduce-motion .view,
-.reduce-motion button { animation: none; transition: none; }
+.reduce-motion *, .reduce-motion *::before,
+.reduce-motion *::after { animation: none !important; transition: none !important; } /* 全域；!important 才压得住 #win-veil 的 ID 特异性 */
 
 /* 选档页 */
 
@@ -495,4 +495,19 @@ a[href],
 [role="button"] {
   min-height: 44px !important;
   min-width: 44px !important;
+}
+
+/* ---------- 系统偏好：prefers-reduced-motion（设计标准 §4 的 CSS 半） ----------
+   原来这条只挂在 .reduce-motion 类名上（js/main.js:785 写这个类名，写的是「系统地板 +
+   站内开关」的合取），而且只覆盖 .view 与 button 两个选择器：赢的那一下 #win-veil
+   的 rise 动画照旧在动 —— 它的 ID 特异性（1,0,0）本来就压得过任何类选择器。
+   现在两条路都是全域：
+     · 系统偏好 → 这条媒体查询（不靠 JS，系统偏好运行中可改，媒体查询当场跟着变）；
+     · 站内开关 → 上面的 .reduce-motion *（同样是全域）。
+   两条都用 !important，因为要压过 #win-veil 这类 ID 规则。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
