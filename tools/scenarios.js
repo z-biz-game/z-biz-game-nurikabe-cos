@@ -475,7 +475,7 @@ const CONFLICTS = [
     eq('盘外一像素不落子', A().hitAt(box.left - 1, box.top + 4), -1);
 
     const live = [...document.querySelectorAll('#app button')].filter((x) => x.getClientRects().length > 0);
-    eq('棋局屏上的可点名册', live.map((x) => x.id).join(','), 'btn-sound,btn-motion,btn-fullscreen,btn-mode-wall,btn-mode-land,btn-hint,btn-undo,btn-new,btn-clear,btn-menu,btn-reset');
+    eq('棋局屏上的可点名册（安装口按 canInstall 出现）', live.map((x) => x.id).filter((id) => id !== 'btn-install').join(',') + '|' + live.some((x) => x.id === 'btn-install'), 'btn-sound,btn-motion,btn-fullscreen,btn-help,btn-pause,btn-mode-wall,btn-mode-land,btn-hint,btn-undo,btn-new,btn-clear,btn-menu,btn-reset|' + !!A().pwa().canInstall);
     const small = live.filter((x) => {
       const r = x.getBoundingClientRect();
       return Math.round(r.width) < 44 || Math.round(r.height) < 44;
@@ -511,16 +511,16 @@ const CONFLICTS = [
     ck('开回动效就有了水花', A().fx(blank) > 0, String(A().fx(blank)));
     A().Anim.reset(); // 断言用的粒子擦干净：后面所有像素断言都该对着同一张没有水花的盘
     eq('reset 把粒子与仿真刻度一起归零', `${A().anim().alive},${A().anim().simMs},${A().anim().ticks}`, '0,0,0');
-    eq('暂停时落子被挡回', A().tap(at2(0).t, 1), null); // eslint-disable-line
+    A().setPaused(true);
+    eq('再次暂停后落子又被挡回', A().tap(blank), null);
     A().setPaused(false);
+    const t2 = A().state().elapsedMs;
     await wait(1100);
-    const after = A().state().elapsedMs;
-    ck('解除暂停后用时重新往前走', after >= before + 1000, `${before} -> ${after}`);
-    eq('解除暂停把遮罩收掉了', A().visible().paused, false);
+    ck('解除暂停后用时重新往前走、遮罩收掉', A().state().elapsedMs >= t2 + 1000 && !A().visible().paused, `${t2} -> ${A().state().elapsedMs}`);
     A().show('menu');
     await wait(40);
-    eq('选档屏上的可点名册', [...document.querySelectorAll('#app button')].filter((x) => x.getClientRects().length > 0).map((x) => x.id || `档位卡:${x.dataset.tier}`).join(','),
-      'btn-sound,btn-motion,btn-fullscreen,档位卡:novice,档位卡:skilled,档位卡:regular,档位卡:expert,档位卡:master,档位卡:daily,btn-reset');
+    eq('选档屏上的可点名册（安装口按 canInstall 出现）', [...document.querySelectorAll('#app button')].filter((x) => x.getClientRects().length > 0).map((x) => x.id || `档位卡:${x.dataset.tier}`).filter((id) => id !== 'btn-install').join(',') + '|' + ($('#btn-install').getClientRects().length > 0),
+      'btn-sound,btn-motion,btn-fullscreen,btn-help,档位卡:novice,档位卡:skilled,档位卡:regular,档位卡:expert,档位卡:master,档位卡:daily,btn-reset|' + !!A().pwa().canInstall);
     eq('选档屏上没有到不了 44 的目标', [...document.querySelectorAll('#app button')].filter((x) => {
       const r = x.getBoundingClientRect();
       return r.width > 0 && (Math.round(r.width) < 44 || Math.round(r.height) < 44);

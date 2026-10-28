@@ -31,15 +31,15 @@
 
 - 五档：初学 5×5、熟手 6×6、常规 7×7、高手 8×8、大师 10×10（`js/engine/generate.js:35-91`），
   外加按天换题的日课：日期经 `dailySeed` 变成种子，档位再按天序轮换，两者都确定
-  （`js/main.js:468-473`、`js/engine/rng.js:63-66`）。
+  （`js/main.js:565-570`、`js/engine/rng.js:63-66`）。
 - 落子：拖动连续落子，从同色上起笔就是擦；`1` 墙、`2` 岛、`M` 换模式、`H` 提示、`Z` 撤销
-  （`index.html:128`）。一整笔算一条撤销记录，不是每格一条（`js/main.js:567-576`）。
+  （`index.html:128`）。一整笔算一条撤销记录，不是每格一条（`js/main.js:669-679`）。
 - 提示是"下一步可证的事实"：它说出哪一格必须是什么、凭七条里的哪一条，并替你把那一格落下
   （`js/ui/game.js:229-242`）。落下的那一格在盘面的**每一个解**里都成立，所以提示不会把你带进歧路。
-  你自己已经画反了的时候，提示拒绝落子、也不计费（`js/ui/game.js:209-228`、`js/main.js:582-589`）。
+  你自己已经画反了的时候，提示拒绝落子、也不计费（`js/ui/game.js:209-228`、`js/main.js:685-692`）。
 - 侧栏八个读数（步数 / 提示 / 已定 / 未定 / 凑满的岛 / 墙块数 / 冲突 / 难度实测，
   `index.html:104-114`）全部由引擎现算，不是界面自己数格子；「凑满的岛」「墙块数」只有**没达成**时
-  才变红（`js/main.js:260-262`）。开局空盘满屏红框这种事是被明确禁止的，理由写在
+  才变红（`js/main.js:353-355`）。开局空盘满屏红框这种事是被明确禁止的，理由写在
   `js/engine/nurikabe.js:580-581`。
 - 存档只有一份、一个键 `nurikabe.save.v1`（`js/store.js:8`）：接着上次那盘继续，或者「清空存档」
   从头来（内存与磁盘两边一起清，`js/store.js:197-202`）。
@@ -50,7 +50,7 @@
 |---|---|
 | **零猜测**：出货的每一盘都能用那七条从空盘推到底，一次都不许回头猜 | 出题的第 ③ 步就是拿铅笔路径重跑一遍、推不完整盘丢掉（`js/engine/generate.js:221-233`）；`tools/balance.mjs:95-105` 拿显式种子现场重新出题，对每张出货盘再断言一次 `solve().ok`，不成立就 `exit 1` |
 | **唯一解由第二套互不信任的穷举器逐格复核**，不是"没找到第二个" | `crossCheck`（`js/engine/generate.js:301-321`）要求穷举状态恰为 `UNIQUE`、逐格比对 `mismatch === 0`；`count.js` 全文没有一条 `import`，几何与编码都是它自己重写的。超预算只算 `OVERBUDGET`，永远不算唯一（`js/engine/count.js:352-359`） |
-| **提示只给"下一步可证的事实"**，并且说清凭哪条规则 | 提示的唯一的来源就是铅笔求解器写下的那条 `d`：解释文本与引擎落下的格子取自同一份数据（`js/engine/nurikabe.js:152-153`、`nextFact` `:512-522`），界面把规则名和层级一起打出来（`js/main.js:597`） |
+| **提示只给"下一步可证的事实"**，并且说清凭哪条规则 | 提示的唯一的来源就是铅笔求解器写下的那条 `d`：解释文本与引擎落下的格子取自同一份数据（`js/engine/nurikabe.js:152-153`、`nextFact` `:512-522`），界面把规则名和层级一起打出来（`js/main.js:699-701`） |
 | **难度是量出来的**：`TIERS[].band` 是实测区间，不是作者的感觉 | `SAMPLES=24 node tools/balance.mjs` 的三道闸：五档全出货、入带率 100% 且 p50 在带内、p50 与 min 严格递增（`tools/balance.mjs:178-192`），全过才印那句「结论：门禁全过」（`:218`）。band 一旦说谎这一步就会红，这是它自己的注释写的（`js/engine/generate.js:21-34`） |
 
 ## 这个仓**不承诺**什么
@@ -71,7 +71,7 @@
   `tools/bake.mjs`，那条命令现在是红的。`.github/workflows/ci.yml:27-34` 把它点名为唯一还缺的
   那道闸——缺就写明缺，因为"检查一个不存在的东西"的绿是谎话。每一局都是现场出的题。
 - **有代码、但浏览器闸没断言过的分支**：「线索推完而盘未满」的 `stalled` 文案
-  （`js/ui/game.js:245`、`js/main.js:590-595`）与状态行那句 `stuck`（`js/main.js:223`，
+  （`js/ui/game.js:245`、`js/main.js:693-697`）与状态行那句 `stuck`（`js/main.js:291-324`，
   它来自 `js/ui/game.js:104` 的 `reachable()`）。出货盘必然推得完，正常玩法碰不到这两句；
   `tools/scenarios.js:577` 只把"提示走到 stalled"当成跑题失败来处理，
   并没有断言这两句话长什么样、渲染在哪。
@@ -157,7 +157,7 @@ node tools/engine-test.mjs # 引擎断言 438/438 通过，8 节（A1 A2 B C D1 
 SAMPLES=24 node tools/balance.mjs # 难度尺：五档全出货 / 入带率 100% / p50 严格递增，否则 exit 1
 node tools/doctest.mjs     # 文档数字闸：README/DESIGN 每个现值 == 代码或 balance/engine-test 现跑
 node tools/sabotage.mjs    # 破坏试验台账：把每类谎塞回代码，逼对应断言变红，再逐字节复原
-bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL 形态，各 755 条断言 0 失败
+bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL 形态，各 773 条断言 0 失败
 ```
 
 - `engine-test` 的八节，标题就是它们各自盯的东西：A1 盘的构造与校验｜A2 穷举器自己先要对｜
@@ -253,17 +253,17 @@ bash tools/verify.sh       # 真实 headless Chrome：9 个场景 × 2 种 URL �
 - **零美术与音频文件**：岛纸、墙的云纹（由格号决定，不是随机噪点，`js/render/board.js:22-32`）、
   数字、绿环、红框、favicon（`index.html:10` 的 data URI，否则浏览器会去 Pages 域名根上探
   `/favicon.ico` 白留一条 404）全部现画。
-- **DOM 是状态的复述，只有一处同步点**：所有改动入口最后都走 `afterChange()`（`js/main.js:548-554`），
-  连"帮我把这盘推完"也不例外（`js/main.js:629-639`）。
+- **DOM 是状态的复述，只有一处同步点**：所有改动入口最后都走 `afterChange()`（`js/main.js:649-655`），
+  连"帮我把这盘推完"也不例外（`js/main.js:737-742`）。
 - **存档一个键** `nurikabe.save.v1`：盘本身不进存储（存的是**原点 seed**，`js/store.js:170-171`），
   墨走 RLE（`js/store.js:17-48`）；每个字段过 `shapeOf`/`sanitize`（`:77-108`），
   墨与盘面对不上数就**整份丢掉**（`:41-42`），`localStorage` 整个儿抛异常（隐私模式）也照样能玩，
   `reset` 内存与磁盘两边一起清（`:197-202`）。10×10 的存档一两百字节。
 - **布局问的是容器，不是视口**：`#app { container-type: inline-size }` +
   `@container (max-width: 860px)`（`css/game.css:31`、`:440-442`），画布边长由 `.stage` 内容盒
-  与视口高一起定（`js/main.js:139-169`）。细节与踩过的坑在 `DESIGN.md` §7。
+  与视口高一起定（`js/main.js:216-255`）。细节与踩过的坑在 `DESIGN.md` §7。
 - 规模：10 个运行时 ES Module + 5 个验证脚本 + 静态服务与 Electron 壳，浏览器侧约 4100 行、
-  验证侧约 3000 行；引擎断言 438 条、浏览器断言 755 条/形态，均为实测（出处见上）。
+  验证侧约 3000 行；引擎断言 438 条、浏览器断言 773 条/形态，均为实测（2026-10-28 复跑，出处见上）。
 
 ## 目录
 
